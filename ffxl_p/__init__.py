@@ -5,19 +5,19 @@ A lightweight, file-based feature flag system for Python applications.
 Supports YAML configuration with user-specific feature access control.
 """
 
+import hashlib
+import json
 import logging
 import os
-import json
-import hashlib
 import uuid
-from typing import Dict, List, Optional, Any, Union
+from typing import Any, Dict, List, Optional, Union
 
 User = Union[int, str, uuid.UUID]
 
 try:
     import yaml
 except ImportError:
-    raise ImportError("PyYAML is required. Install with: pip install pyyaml")
+    raise ImportError("PyYAML is required. Install with: pip install pyyaml") from None
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class FeatureFlagConfig:
         - Even distribution across 0-100 range
         """
         # Combine feature name and user ID for consistent hashing
-        hash_input = f"{feature_name}:{user_id}".encode("utf-8")
+        hash_input = f"{feature_name}:{user_id}".encode()
 
         h = hashlib.sha256(hash_input).digest()
 
@@ -231,7 +231,7 @@ def load_feature_flags(
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Feature flags file not found: {file_path}")
 
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     _global_config = FeatureFlagConfig(config, environment)

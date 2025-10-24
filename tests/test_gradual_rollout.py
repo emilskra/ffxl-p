@@ -3,8 +3,8 @@ import tempfile
 
 from ffxl_p import (
     FeatureFlagConfig,
-    load_feature_flags,
     is_feature_enabled,
+    load_feature_flags,
 )
 
 
@@ -47,6 +47,7 @@ def test_percentage_rollout_different_environments(rollout_config):
     config_dev = FeatureFlagConfig(rollout_config, environment="dev")
     # Should be enabled in dev (100%)
     # Note: We can't guarantee True for specific user, but high percentage means likely
+    dev_result = config_dev.is_feature_enabled("gradual_feature", user)
 
     # Staging: 50%
     config_staging = FeatureFlagConfig(rollout_config, environment="staging")
@@ -59,6 +60,7 @@ def test_percentage_rollout_different_environments(rollout_config):
     # Results should be consistent per environment
     assert config_staging.is_feature_enabled("gradual_feature", user) == staging_result
     assert config_prod.is_feature_enabled("gradual_feature", user) == prod_result
+    assert config_dev.is_feature_enabled("gradual_feature", user) == dev_result
 
 
 def test_percentage_rollout_requires_user(rollout_config):

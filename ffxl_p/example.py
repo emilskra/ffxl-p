@@ -3,16 +3,15 @@ Example usage of FFXL-P Feature Flags
 """
 
 from ffxl_p import (
-    load_feature_flags,
-    is_feature_enabled,
-    is_any_feature_enabled,
     are_all_features_enabled,
-    get_enabled_features,
-    get_feature_flags,
     feature_exists,
     get_all_feature_names,
+    get_enabled_features,
     get_feature_config,
-    User,
+    get_feature_flags,
+    is_any_feature_enabled,
+    is_feature_enabled,
+    load_feature_flags,
 )
 
 
@@ -30,8 +29,8 @@ def main():
 
     # Example: Check user-specific features
     print("Example: User-specific feature check")
-    admin_user = User(user_id="user-123")
-    regular_user = User(user_id="user-789")
+    admin_user = "user-123"
+    regular_user = "user-789"
 
     print(f"Is 'admin_panel' enabled for admin? {is_feature_enabled('admin_panel', admin_user)}")
     print(
@@ -74,7 +73,7 @@ def main():
 
     # Example: Conditional feature usage
     print("Example: Conditional feature rendering")
-    current_user = User(user_id="developer-001")
+    current_user = "developer-001"
 
     if is_feature_enabled("new_dashboard", current_user):
         print("  Rendering new dashboard UI")

@@ -2,12 +2,10 @@
 Example usage of FFXL-P Feature Flags with Environment-Based Flags
 """
 
-import os
 from ffxl_p import (
-    load_feature_flags,
-    is_feature_enabled,
     get_enabled_features,
-    User,
+    is_feature_enabled,
+    load_feature_flags,
 )
 
 
@@ -66,8 +64,8 @@ def main():
 
     load_feature_flags("./feature-flags.yaml", environment="dev")
 
-    dev_user = User(user_id="developer-001")
-    regular_user = User(user_id="regular-user")
+    dev_user = "developer-001"
+    regular_user = "regular-user"
 
     print(
         f"Experimental API for developer (dev env): {is_feature_enabled('experimental_api', dev_user)}"
