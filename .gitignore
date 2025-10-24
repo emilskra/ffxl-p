@@ -19,6 +19,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
 # Virtual environments
 venv/
@@ -33,9 +34,20 @@ env/
 *.swo
 *~
 
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+coverage.xml
+*.cover
+
 # OS
 .DS_Store
 Thumbs.db
 
 # AI
 .claude/
+
+# Ruff
+.ruff_cache/

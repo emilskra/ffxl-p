@@ -1,5 +1,10 @@
 # FFXL-P: Feature Flags Extra Light - Python
 
+[![PyPI version](https://badge.fury.io/py/ffxl-p.svg)](https://badge.fury.io/py/ffxl-p)
+[![Python Versions](https://img.shields.io/pypi/pyversions/ffxl-p.svg)](https://pypi.org/project/ffxl-p/)
+[![CI](https://github.com/yourusername/ffxl-p/workflows/CI/badge.svg)](https://github.com/yourusername/ffxl-p/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A lightweight, file-based feature flag system for Python applications. This is a Python implementation inspired by the [ffxl](https://github.com/57uff3r/ffxl) TypeScript library.
 
 ## Features
@@ -9,17 +14,16 @@ A lightweight, file-based feature flag system for Python applications. This is a
 - User-specific feature flag access control
 - Development mode with informative logging
 - Simple, intuitive API
-- Type hints support
+- Full type hints support
+- Tested on Python 3.8+
 
 ## Installation
 
-Install the required dependency:
+Install from PyPI:
 
 ```bash
-pip install pyyaml
+pip install ffxl-p
 ```
-
-Copy `ffxl.py` to your project.
 
 ## Quick Start
 
@@ -47,7 +51,7 @@ features:
 ### 2. Use in your code
 
 ```python
-from ffxl import load_feature_flags, is_feature_enabled, User
+from ffxl_p import load_feature_flags, is_feature_enabled, User
 
 # Load configuration
 load_feature_flags()
@@ -175,7 +179,7 @@ export FFXL_DEV_MODE=true
 
 ```python
 from flask import Flask
-from ffxl import load_feature_flags, is_feature_enabled
+from ffxl_p import load_feature_flags, is_feature_enabled
 import os
 
 app = Flask(__name__)
@@ -196,13 +200,13 @@ def index():
 
 ```python
 # settings.py
-from ffxl import load_feature_flags
+from ffxl_p import load_feature_flags
 
 FEATURE_FLAGS = load_feature_flags('./feature-flags.yaml')
 
 # In views or middleware
 from django.conf import settings
-from ffxl import is_feature_enabled
+from ffxl_p import is_feature_enabled
 
 def my_view(request):
     user = {'user_id': request.user.id}
@@ -215,7 +219,7 @@ def my_view(request):
 
 ```python
 from fastapi import FastAPI, Depends
-from ffxl import load_feature_flags, is_feature_enabled
+from ffxl_p import load_feature_flags, is_feature_enabled
 
 app = FastAPI()
 
@@ -237,7 +241,7 @@ async def dashboard(user_id: str):
 You can pass either a `User` object or a dictionary:
 
 ```python
-from ffxl import User
+from ffxl_p import User
 
 # Using User class
 user = User(user_id="123")
@@ -255,12 +259,78 @@ See `example.py` for comprehensive usage examples:
 python example.py
 ```
 
+## Testing
+
+The library includes a comprehensive test suite with 53+ tests covering:
+- Global and user-specific feature flags
+- Multiple feature checks
+- Configuration loading (file, environment variables)
+- Development mode logging
+- Edge cases and error handling
+- Real-world usage scenarios
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest test_ffxl.py
+
+# Run with verbose output
+pytest test_ffxl.py -v
+
+# Run with coverage (requires pytest-cov)
+pip install pytest-cov
+pytest test_ffxl.py --cov=ffxl --cov-report=term-missing
+
+# Or use make commands
+make test
+make test-verbose
+make test-coverage
+```
+
+### Test Coverage
+
+The test suite covers:
+- `TestFeatureFlagConfig`: 23 tests for core functionality
+- `TestLoadingFunctions`: 5 tests for configuration loading
+- `TestGlobalAPIFunctions`: 10 tests for global API
+- `TestDevelopmentMode`: 3 tests for logging
+- `TestUserObject`: 4 tests for user handling
+- `TestEdgeCases`: 5 tests for edge cases
+- `TestRealWorldScenarios`: 3 tests for practical usage
+
 ## Development
 
 Run with development mode for detailed logging:
 
 ```bash
 FFXL_DEV_MODE=true python example.py
+```
+
+### Development Setup
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Install development dependencies
+pip install pytest pytest-cov
+
+# Or use make
+make install-dev
+```
+
+### Make Commands
+
+The project includes a Makefile for common tasks:
+
+```bash
+make test              # Run tests
+make test-verbose      # Run tests with verbose output
+make test-coverage     # Run tests with coverage report
+make example           # Run example
+make example-dev       # Run example with dev mode
+make clean             # Clean up temporary files
 ```
 
 ## Comparison with TypeScript Version

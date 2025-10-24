@@ -2,7 +2,7 @@
 Example usage of FFXL-P Feature Flags
 """
 
-from ffxl import (
+from ffxl_p import (
     load_feature_flags,
     is_feature_enabled,
     is_any_feature_enabled,
@@ -12,14 +12,14 @@ from ffxl import (
     feature_exists,
     get_all_feature_names,
     get_feature_config,
-    User
+    User,
 )
 
 
 def main():
     # Load feature flags from YAML file
     print("Loading feature flags...")
-    config = load_feature_flags('./feature-flags.yaml')
+    config = load_feature_flags("./feature-flags.yaml")
     print(f"Loaded {len(config['features'])} features\n")
 
     # Example 1: Check if a feature is globally enabled
@@ -33,21 +33,31 @@ def main():
     admin_user = User(user_id="user-123")
     regular_user = User(user_id="user-789")
 
-    print(f"Is 'admin_panel' enabled for admin? {is_feature_enabled('admin_panel', admin_user)}")
-    print(f"Is 'admin_panel' enabled for regular user? {is_feature_enabled('admin_panel', regular_user)}")
+    print(
+        f"Is 'admin_panel' enabled for admin? {is_feature_enabled('admin_panel', admin_user)}"
+    )
+    print(
+        f"Is 'admin_panel' enabled for regular user? {is_feature_enabled('admin_panel', regular_user)}"
+    )
     print()
 
     # Example 3: Using dict instead of User object
     print("Example 3: Using dict for user")
-    user_dict = {'user_id': 'user-456'}
-    print(f"Is 'admin_panel' enabled for user-456? {is_feature_enabled('admin_panel', user_dict)}")
+    user_dict = {"user_id": "user-456"}
+    print(
+        f"Is 'admin_panel' enabled for user-456? {is_feature_enabled('admin_panel', user_dict)}"
+    )
     print()
 
     # Example 4: Check multiple features
     print("Example 4: Multiple feature checks")
-    features_to_check = ['new_dashboard', 'beta_feature', 'dark_mode']
-    print(f"Is ANY of {features_to_check} enabled? {is_any_feature_enabled(features_to_check)}")
-    print(f"Are ALL of {features_to_check} enabled? {are_all_features_enabled(features_to_check)}")
+    features_to_check = ["new_dashboard", "beta_feature", "dark_mode"]
+    print(
+        f"Is ANY of {features_to_check} enabled? {is_any_feature_enabled(features_to_check)}"
+    )
+    print(
+        f"Are ALL of {features_to_check} enabled? {are_all_features_enabled(features_to_check)}"
+    )
     print()
 
     # Example 5: Get all enabled features for a user
@@ -59,7 +69,7 @@ def main():
 
     # Example 6: Get feature flags as dict
     print("Example 6: Get feature flags as dict")
-    flags = get_feature_flags(['new_dashboard', 'admin_panel', 'dark_mode'], admin_user)
+    flags = get_feature_flags(["new_dashboard", "admin_panel", "dark_mode"], admin_user)
     print(f"Feature flags for admin: {flags}")
     print()
 
@@ -72,7 +82,7 @@ def main():
 
     # Example 8: Get feature configuration
     print("Example 8: Get feature configuration")
-    config = get_feature_config('admin_panel')
+    config = get_feature_config("admin_panel")
     print(f"Admin panel config: {config}")
     print()
 
@@ -80,12 +90,12 @@ def main():
     print("Example 9: Conditional feature rendering")
     current_user = User(user_id="developer-001")
 
-    if is_feature_enabled('new_dashboard', current_user):
+    if is_feature_enabled("new_dashboard", current_user):
         print("  Rendering new dashboard UI")
     else:
         print("  Rendering old dashboard UI")
 
-    if is_feature_enabled('experimental_api', current_user):
+    if is_feature_enabled("experimental_api", current_user):
         print("  Enabling experimental API endpoints")
     else:
         print("  Using stable API endpoints")
@@ -96,5 +106,5 @@ def main():
     print("Set FFXL_DEV_MODE=true environment variable to see detailed logging")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

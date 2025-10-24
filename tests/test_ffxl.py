@@ -1,0 +1,479 @@
+"""
+Unit tests for FFXL-P Feature Flags
+"""
+
+import os
+import json
+import tempfile
+import pytest
+from pathlib import Path
+
+import ffxl_p
+from ffxl_p import (
+    FeatureFlagConfig,
+    User,
+    load_feature_flags,
+    load_feature_flags_as_string,
+    is_feature_enabled,
+    is_any_feature_enabled,
+    are_all_features_enabled,
+    get_enabled_features,
+    get_feature_flags,
+    feature_exists,
+    get_all_feature_names,
+    get_feature_config,
+)
+
+
+# Test fixtures
+@pytest.fixture
+def sample_config():
+    """Sample configuration for testing."""
+    return {
+        "features": {
+            "enabled_feature": {"enabled": True, "comment": "Always enabled"},
+            "disabled_feature": {"enabled": False, "comment": "Always disabled"},
+            "user_specific": {
+                "onlyForUserIds": ["user-1", "user-2"],
+                "comment": "Only for specific users",
+            },
+            "combined_feature": {
+                "enabled": True,
+                "onlyForUserIds": ["user-3"],
+                "comment": "Enabled but restricted to user-3",
+            },
+            "empty_user_list": {"onlyForUserIds": [], "comment": "Empty user list"},
+        }
+    }
+
+
+@pytest.fixture
+def temp_yaml_file(sample_config):
+    """Create a temporary YAML file with sample configuration."""
+    import yaml
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        yaml.dump(sample_config, f)
+        temp_path = f.name
+
+    yield temp_path
+
+    # Cleanup
+    os.unlink(temp_path)
+
+
+@pytest.fixture
+def reset_global_config():
+    """Reset global config before and after each test."""
+    ffxl_p._global_config = None
+    yield
+    ffxl_p._global_config = None
+
+
+@pytest.fixture
+def feature_config(sample_config):
+    """Create a FeatureFlagConfig instance."""
+    return FeatureFlagConfig(sample_config)
+
+
+class TestFeatureFlagConfig:
+    """Tests for FeatureFlagConfig class."""
+
+    def test_init(self, sample_config):
+        """Test FeatureFlagConfig initialization."""
+        config = FeatureFlagConfig(sample_config)
+        assert config._config == sample_config
+
+    def test_is_feature_enabled_global_true(self, feature_config):
+        """Test globally enabled feature."""
+        assert feature_config.is_feature_enabled("enabled_feature") is True
+
+    def test_is_feature_enabled_global_false(self, feature_config):
+        """Test globally disabled feature."""
+        assert feature_config.is_feature_enabled("disabled_feature") is False
+
+    def test_is_feature_enabled_nonexistent(self, feature_config):
+        """Test nonexistent feature returns False."""
+        assert feature_config.is_feature_enabled("nonexistent") is False
+
+    def test_is_feature_enabled_user_specific_with_user(self, feature_config):
+        """Test user-specific feature with authorized user."""
+        user = User(user_id="user-1")
+        assert feature_config.is_feature_enabled("user_specific", user) is True
+
+    def test_is_feature_enabled_user_specific_without_user(self, feature_config):
+        """Test user-specific feature without user returns False."""
+        assert feature_config.is_feature_enabled("user_specific") is False
+
+    def test_is_feature_enabled_user_specific_unauthorized(self, feature_config):
+        """Test user-specific feature with unauthorized user."""
+        user = User(user_id="user-999")
+        assert feature_config.is_feature_enabled("user_specific", user) is False
+
+    def test_is_feature_enabled_user_dict(self, feature_config):
+        """Test user-specific feature with user dict."""
+        user = {"user_id": "user-2"}
+        assert feature_config.is_feature_enabled("user_specific", user) is True
+
+    def test_is_feature_enabled_combined(self, feature_config):
+        """Test combined enabled + user-specific (user-specific takes precedence)."""
+        # User-3 should have access
+        user3 = User(user_id="user-3")
+        assert feature_config.is_feature_enabled("combined_feature", user3) is True
+
+        # User-1 should NOT have access (even though enabled=true)
+        user1 = User(user_id="user-1")
+        assert feature_config.is_feature_enabled("combined_feature", user1) is False
+
+    def test_is_feature_enabled_empty_user_list(self, feature_config):
+        """Test feature with empty user list."""
+        user = User(user_id="user-1")
+        # Empty list should not match any user
+        assert feature_config.is_feature_enabled("empty_user_list", user) is False
+
+    def test_is_any_feature_enabled_true(self, feature_config):
+        """Test is_any_feature_enabled returns True when at least one is enabled."""
+        result = feature_config.is_any_feature_enabled(
+            ["enabled_feature", "disabled_feature"]
+        )
+        assert result is True
+
+    def test_is_any_feature_enabled_false(self, feature_config):
+        """Test is_any_feature_enabled returns False when none are enabled."""
+        result = feature_config.is_any_feature_enabled(
+            ["disabled_feature", "nonexistent"]
+        )
+        assert result is False
+
+    def test_is_any_feature_enabled_with_user(self, feature_config):
+        """Test is_any_feature_enabled with user-specific features."""
+        user = User(user_id="user-1")
+        result = feature_config.is_any_feature_enabled(
+            ["user_specific", "disabled_feature"], user
+        )
+        assert result is True
+
+    def test_are_all_features_enabled_true(self, feature_config):
+        """Test are_all_features_enabled returns True when all are enabled."""
+        user = User(user_id="user-1")
+        result = feature_config.are_all_features_enabled(
+            ["enabled_feature", "user_specific"], user
+        )
+        assert result is True
+
+    def test_are_all_features_enabled_false(self, feature_config):
+        """Test are_all_features_enabled returns False when not all are enabled."""
+        result = feature_config.are_all_features_enabled(
+            ["enabled_feature", "disabled_feature"]
+        )
+        assert result is False
+
+    def test_get_enabled_features_no_user(self, feature_config):
+        """Test get_enabled_features without user."""
+        enabled = feature_config.get_enabled_features()
+        assert "enabled_feature" in enabled
+        assert "disabled_feature" not in enabled
+        assert "user_specific" not in enabled
+
+    def test_get_enabled_features_with_user(self, feature_config):
+        """Test get_enabled_features with user."""
+        user = User(user_id="user-1")
+        enabled = feature_config.get_enabled_features(user)
+        assert "enabled_feature" in enabled
+        assert "user_specific" in enabled
+        assert "disabled_feature" not in enabled
+
+    def test_get_feature_flags(self, feature_config):
+        """Test get_feature_flags returns dict of feature statuses."""
+        user = User(user_id="user-1")
+        flags = feature_config.get_feature_flags(
+            ["enabled_feature", "disabled_feature", "user_specific"], user
+        )
+
+        assert flags == {
+            "enabled_feature": True,
+            "disabled_feature": False,
+            "user_specific": True,
+        }
+
+    def test_feature_exists_true(self, feature_config):
+        """Test feature_exists returns True for existing feature."""
+        assert feature_config.feature_exists("enabled_feature") is True
+
+    def test_feature_exists_false(self, feature_config):
+        """Test feature_exists returns False for nonexistent feature."""
+        assert feature_config.feature_exists("nonexistent") is False
+
+    def test_get_all_feature_names(self, feature_config):
+        """Test get_all_feature_names returns all feature names."""
+        names = feature_config.get_all_feature_names()
+        assert "enabled_feature" in names
+        assert "disabled_feature" in names
+        assert "user_specific" in names
+        assert len(names) == 5
+
+    def test_get_feature_config_exists(self, feature_config):
+        """Test get_feature_config returns config for existing feature."""
+        config = feature_config.get_feature_config("enabled_feature")
+        assert config is not None
+        assert config["enabled"] is True
+        assert "comment" in config
+
+    def test_get_feature_config_nonexistent(self, feature_config):
+        """Test get_feature_config returns None for nonexistent feature."""
+        config = feature_config.get_feature_config("nonexistent")
+        assert config is None
+
+
+class TestLoadingFunctions:
+    """Tests for configuration loading functions."""
+
+    def test_load_feature_flags_from_file(self, temp_yaml_file, reset_global_config):
+        """Test loading feature flags from YAML file."""
+        config = load_feature_flags(temp_yaml_file)
+
+        assert "features" in config
+        assert "enabled_feature" in config["features"]
+
+    def test_load_feature_flags_from_env_variable(
+        self, sample_config, reset_global_config, monkeypatch
+    ):
+        """Test loading feature flags from FFXL_CONFIG env variable."""
+        monkeypatch.setenv("FFXL_CONFIG", json.dumps(sample_config))
+
+        config = load_feature_flags()
+        assert config == sample_config
+
+    def test_load_feature_flags_custom_path_env(
+        self, temp_yaml_file, reset_global_config, monkeypatch
+    ):
+        """Test loading from custom path via FFXL_FILE env variable."""
+        monkeypatch.setenv("FFXL_FILE", temp_yaml_file)
+
+        config = load_feature_flags()
+        assert "features" in config
+
+    def test_load_feature_flags_file_not_found(self, reset_global_config):
+        """Test loading from nonexistent file raises error."""
+        with pytest.raises(FileNotFoundError):
+            load_feature_flags("/nonexistent/path.yaml")
+
+    def test_load_feature_flags_as_string(self, temp_yaml_file, reset_global_config):
+        """Test loading feature flags as JSON string."""
+        config_string = load_feature_flags_as_string(temp_yaml_file)
+
+        assert isinstance(config_string, str)
+        config = json.loads(config_string)
+        assert "features" in config
+
+
+class TestGlobalAPIFunctions:
+    """Tests for global API functions."""
+
+    def test_is_feature_enabled(self, temp_yaml_file, reset_global_config):
+        """Test global is_feature_enabled function."""
+        load_feature_flags(temp_yaml_file)
+
+        assert is_feature_enabled("enabled_feature") is True
+        assert is_feature_enabled("disabled_feature") is False
+
+    def test_is_feature_enabled_with_user(self, temp_yaml_file, reset_global_config):
+        """Test global is_feature_enabled with user."""
+        load_feature_flags(temp_yaml_file)
+        user = User(user_id="user-1")
+
+        assert is_feature_enabled("user_specific", user) is True
+
+    def test_is_any_feature_enabled(self, temp_yaml_file, reset_global_config):
+        """Test global is_any_feature_enabled function."""
+        load_feature_flags(temp_yaml_file)
+
+        assert is_any_feature_enabled(["enabled_feature", "disabled_feature"]) is True
+
+    def test_are_all_features_enabled(self, temp_yaml_file, reset_global_config):
+        """Test global are_all_features_enabled function."""
+        load_feature_flags(temp_yaml_file)
+
+        assert (
+            are_all_features_enabled(["enabled_feature", "disabled_feature"]) is False
+        )
+
+    def test_get_enabled_features(self, temp_yaml_file, reset_global_config):
+        """Test global get_enabled_features function."""
+        load_feature_flags(temp_yaml_file)
+
+        enabled = get_enabled_features()
+        assert "enabled_feature" in enabled
+        assert "disabled_feature" not in enabled
+
+    def test_get_feature_flags(self, temp_yaml_file, reset_global_config):
+        """Test global get_feature_flags function."""
+        load_feature_flags(temp_yaml_file)
+
+        flags = get_feature_flags(["enabled_feature", "disabled_feature"])
+        assert flags["enabled_feature"] is True
+        assert flags["disabled_feature"] is False
+
+    def test_feature_exists(self, temp_yaml_file, reset_global_config):
+        """Test global feature_exists function."""
+        load_feature_flags(temp_yaml_file)
+
+        assert feature_exists("enabled_feature") is True
+        assert feature_exists("nonexistent") is False
+
+    def test_get_all_feature_names(self, temp_yaml_file, reset_global_config):
+        """Test global get_all_feature_names function."""
+        load_feature_flags(temp_yaml_file)
+
+        names = get_all_feature_names()
+        assert "enabled_feature" in names
+
+    def test_get_feature_config(self, temp_yaml_file, reset_global_config):
+        """Test global get_feature_config function."""
+        load_feature_flags(temp_yaml_file)
+
+        config = get_feature_config("enabled_feature")
+        assert config is not None
+        assert config["enabled"] is True
+
+    def test_auto_load_on_first_use(
+        self, temp_yaml_file, reset_global_config, monkeypatch
+    ):
+        """Test that config auto-loads on first API call."""
+        # Set default file path
+        monkeypatch.setenv("FFXL_FILE", temp_yaml_file)
+
+        # Call API without explicit load
+        result = is_feature_enabled("enabled_feature")
+        assert result is True
+
+
+class TestDevelopmentMode:
+    """Tests for development mode logging."""
+
+    def test_dev_mode_enabled(self, feature_config, monkeypatch, capsys):
+        """Test that dev mode logs messages."""
+        monkeypatch.setenv("FFXL_DEV_MODE", "true")
+        config = FeatureFlagConfig(feature_config._config)
+
+        config.is_feature_enabled("enabled_feature")
+
+        captured = capsys.readouterr()
+        assert "[FFXL]" in captured.out
+
+    def test_dev_mode_disabled(self, feature_config, capsys):
+        """Test that dev mode doesn't log when disabled."""
+        feature_config.is_feature_enabled("enabled_feature")
+
+        captured = capsys.readouterr()
+        assert "[FFXL]" not in captured.out
+
+    def test_dev_mode_various_values(self, sample_config, monkeypatch, capsys):
+        """Test various dev mode environment values."""
+        test_values = ["true", "1", "yes", "TRUE", "Yes"]
+
+        for value in test_values:
+            monkeypatch.setenv("FFXL_DEV_MODE", value)
+            config = FeatureFlagConfig(sample_config)
+            config.is_feature_enabled("enabled_feature")
+
+            captured = capsys.readouterr()
+            assert "[FFXL]" in captured.out, (
+                f"Dev mode should be enabled for value: {value}"
+            )
+
+
+class TestUserObject:
+    """Tests for User object handling."""
+
+    def test_user_class(self, feature_config):
+        """Test using User class."""
+        user = User(user_id="user-1")
+        assert feature_config.is_feature_enabled("user_specific", user) is True
+
+    def test_user_dict(self, feature_config):
+        """Test using dict as user."""
+        user = {"user_id": "user-1"}
+        assert feature_config.is_feature_enabled("user_specific", user) is True
+
+    def test_user_dict_missing_user_id(self, feature_config):
+        """Test dict without user_id key."""
+        user = {"id": "user-1"}
+        assert feature_config.is_feature_enabled("user_specific", user) is False
+
+    def test_none_user(self, feature_config):
+        """Test None as user."""
+        assert feature_config.is_feature_enabled("user_specific", None) is False
+
+
+class TestEdgeCases:
+    """Tests for edge cases and error handling."""
+
+    def test_empty_config(self):
+        """Test with empty configuration."""
+        config = FeatureFlagConfig({})
+        assert config.get_all_feature_names() == []
+        assert config.feature_exists("anything") is False
+
+    def test_missing_features_key(self):
+        """Test config without 'features' key."""
+        config = FeatureFlagConfig({"other": "data"})
+        assert config.get_all_feature_names() == []
+
+    def test_feature_without_enabled_key(self):
+        """Test feature without 'enabled' key defaults to False."""
+        config = FeatureFlagConfig(
+            {"features": {"no_enabled_key": {"comment": "No enabled key"}}}
+        )
+        assert config.is_feature_enabled("no_enabled_key") is False
+
+    def test_empty_feature_names_list(self, feature_config):
+        """Test with empty list of feature names."""
+        assert feature_config.is_any_feature_enabled([]) is False
+        assert feature_config.are_all_features_enabled([]) is True
+        assert feature_config.get_feature_flags([]) == {}
+
+    def test_multiple_users_same_feature(self, feature_config):
+        """Test same feature with different users."""
+        user1 = User(user_id="user-1")
+        user2 = User(user_id="user-2")
+        user3 = User(user_id="user-999")
+
+        assert feature_config.is_feature_enabled("user_specific", user1) is True
+        assert feature_config.is_feature_enabled("user_specific", user2) is True
+        assert feature_config.is_feature_enabled("user_specific", user3) is False
+
+
+class TestRealWorldScenarios:
+    """Tests for real-world usage scenarios."""
+
+    def test_feature_rollout_scenario(self, feature_config):
+        """Test gradual feature rollout scenario."""
+        # Beta users get access
+        beta_user = User(user_id="user-3")
+        assert feature_config.is_feature_enabled("combined_feature", beta_user) is True
+
+        # Regular users don't
+        regular_user = User(user_id="user-999")
+        assert (
+            feature_config.is_feature_enabled("combined_feature", regular_user) is False
+        )
+
+    def test_admin_feature_scenario(self, feature_config):
+        """Test admin-only feature scenario."""
+        admin = User(user_id="user-1")
+        regular = User(user_id="user-999")
+
+        # Admin gets access to special features
+        assert feature_config.is_feature_enabled("user_specific", admin) is True
+        assert feature_config.is_feature_enabled("user_specific", regular) is False
+
+    def test_get_user_dashboard_features(self, feature_config):
+        """Test getting all features for a user dashboard."""
+        user = User(user_id="user-1")
+        enabled = feature_config.get_enabled_features(user)
+
+        # User should see globally enabled + their specific features
+        assert "enabled_feature" in enabled
+        assert "user_specific" in enabled
+        assert "disabled_feature" not in enabled

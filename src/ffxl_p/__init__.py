@@ -19,6 +19,7 @@ except ImportError:
 @dataclass
 class User:
     """User object for feature flag evaluation."""
+
     user_id: str
 
 
@@ -27,7 +28,7 @@ class FeatureFlagConfig:
 
     def __init__(self, config: Dict[str, Any]):
         self._config = config
-        self._dev_mode = os.getenv('FFXL_DEV_MODE', '').lower() in ('true', '1', 'yes')
+        self._dev_mode = os.getenv("FFXL_DEV_MODE", "").lower() in ("true", "1", "yes")
 
     def _log(self, message: str) -> None:
         """Log message in development mode."""
@@ -35,9 +36,7 @@ class FeatureFlagConfig:
             print(f"[FFXL] {message}")
 
     def is_feature_enabled(
-        self,
-        feature_name: str,
-        user: Optional[Union[User, Dict[str, str]]] = None
+        self, feature_name: str, user: Optional[Union[User, Dict[str, str]]] = None
     ) -> bool:
         """
         Check if a feature is enabled for the given user.
@@ -53,32 +52,36 @@ class FeatureFlagConfig:
             self._log(f"Feature '{feature_name}' does not exist")
             return False
 
-        feature = self._config['features'][feature_name]
+        feature = self._config["features"][feature_name]
 
         # Extract user_id from user object or dict
         user_id = None
         if user:
             if isinstance(user, User):
                 user_id = user.user_id
-            elif isinstance(user, dict) and 'user_id' in user:
-                user_id = user['user_id']
+            elif isinstance(user, dict) and "user_id" in user:
+                user_id = user["user_id"]
 
         # Check user-specific access
-        if 'onlyForUserIds' in feature and feature['onlyForUserIds']:
-            only_for_users = feature['onlyForUserIds']
+        if "onlyForUserIds" in feature and feature["onlyForUserIds"]:
+            only_for_users = feature["onlyForUserIds"]
             is_enabled = user_id in only_for_users
-            self._log(f"Feature '{feature_name}' is user-specific: {is_enabled} for user '{user_id}'")
+            self._log(
+                f"Feature '{feature_name}' is user-specific: {is_enabled} for user '{user_id}'"
+            )
             return is_enabled
 
         # Check global enabled flag
-        is_enabled = feature.get('enabled', False)
-        self._log(f"Feature '{feature_name}' is globally {'enabled' if is_enabled else 'disabled'}")
+        is_enabled = feature.get("enabled", False)
+        self._log(
+            f"Feature '{feature_name}' is globally {'enabled' if is_enabled else 'disabled'}"
+        )
         return is_enabled
 
     def is_any_feature_enabled(
         self,
         feature_names: List[str],
-        user: Optional[Union[User, Dict[str, str]]] = None
+        user: Optional[Union[User, Dict[str, str]]] = None,
     ) -> bool:
         """
         Check if any of the given features are enabled.
@@ -95,7 +98,7 @@ class FeatureFlagConfig:
     def are_all_features_enabled(
         self,
         feature_names: List[str],
-        user: Optional[Union[User, Dict[str, str]]] = None
+        user: Optional[Union[User, Dict[str, str]]] = None,
     ) -> bool:
         """
         Check if all of the given features are enabled.
@@ -110,8 +113,7 @@ class FeatureFlagConfig:
         return all(self.is_feature_enabled(name, user) for name in feature_names)
 
     def get_enabled_features(
-        self,
-        user: Optional[Union[User, Dict[str, str]]] = None
+        self, user: Optional[Union[User, Dict[str, str]]] = None
     ) -> List[str]:
         """
         Get list of all enabled features for the given user.
@@ -123,14 +125,15 @@ class FeatureFlagConfig:
             List of enabled feature names
         """
         return [
-            name for name in self.get_all_feature_names()
+            name
+            for name in self.get_all_feature_names()
             if self.is_feature_enabled(name, user)
         ]
 
     def get_feature_flags(
         self,
         feature_names: List[str],
-        user: Optional[Union[User, Dict[str, str]]] = None
+        user: Optional[Union[User, Dict[str, str]]] = None,
     ) -> Dict[str, bool]:
         """
         Get enabled status for multiple features as a dictionary.
@@ -142,10 +145,7 @@ class FeatureFlagConfig:
         Returns:
             Dictionary mapping feature names to their enabled status
         """
-        return {
-            name: self.is_feature_enabled(name, user)
-            for name in feature_names
-        }
+        return {name: self.is_feature_enabled(name, user) for name in feature_names}
 
     def feature_exists(self, feature_name: str) -> bool:
         """
@@ -157,7 +157,7 @@ class FeatureFlagConfig:
         Returns:
             True if feature exists, False otherwise
         """
-        return feature_name in self._config.get('features', {})
+        return feature_name in self._config.get("features", {})
 
     def get_all_feature_names(self) -> List[str]:
         """
@@ -166,7 +166,7 @@ class FeatureFlagConfig:
         Returns:
             List of all feature names
         """
-        return list(self._config.get('features', {}).keys())
+        return list(self._config.get("features", {}).keys())
 
     def get_feature_config(self, feature_name: str) -> Optional[Dict[str, Any]]:
         """
@@ -178,7 +178,7 @@ class FeatureFlagConfig:
         Returns:
             Feature configuration dict or None if not found
         """
-        return self._config.get('features', {}).get(feature_name)
+        return self._config.get("features", {}).get(feature_name)
 
 
 # Global configuration instance
@@ -201,13 +201,13 @@ def load_feature_flags(file_path: Optional[str] = None) -> Dict[str, Any]:
 
     if file_path is None:
         file_path = (
-            os.getenv('FFXL_FILE') or
-            os.getenv('FEATURE_FLAGS_FILE') or
-            './feature-flags.yaml'
+            os.getenv("FFXL_FILE")
+            or os.getenv("FEATURE_FLAGS_FILE")
+            or "./feature-flags.yaml"
         )
 
     # Check if config is provided via environment variable
-    env_config = os.getenv('FFXL_CONFIG')
+    env_config = os.getenv("FFXL_CONFIG")
     if env_config:
         try:
             config = json.loads(env_config)
@@ -220,7 +220,7 @@ def load_feature_flags(file_path: Optional[str] = None) -> Dict[str, Any]:
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Feature flags file not found: {file_path}")
 
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     _global_config = FeatureFlagConfig(config)
@@ -253,8 +253,7 @@ def _get_config() -> FeatureFlagConfig:
 
 
 def is_feature_enabled(
-    feature_name: str,
-    user: Optional[Union[User, Dict[str, str]]] = None
+    feature_name: str, user: Optional[Union[User, Dict[str, str]]] = None
 ) -> bool:
     """
     Check if a feature is enabled for the given user.
@@ -270,8 +269,7 @@ def is_feature_enabled(
 
 
 def is_any_feature_enabled(
-    feature_names: List[str],
-    user: Optional[Union[User, Dict[str, str]]] = None
+    feature_names: List[str], user: Optional[Union[User, Dict[str, str]]] = None
 ) -> bool:
     """
     Check if any of the given features are enabled.
@@ -287,8 +285,7 @@ def is_any_feature_enabled(
 
 
 def are_all_features_enabled(
-    feature_names: List[str],
-    user: Optional[Union[User, Dict[str, str]]] = None
+    feature_names: List[str], user: Optional[Union[User, Dict[str, str]]] = None
 ) -> bool:
     """
     Check if all of the given features are enabled.
@@ -304,7 +301,7 @@ def are_all_features_enabled(
 
 
 def get_enabled_features(
-    user: Optional[Union[User, Dict[str, str]]] = None
+    user: Optional[Union[User, Dict[str, str]]] = None,
 ) -> List[str]:
     """
     Get list of all enabled features for the given user.
@@ -319,8 +316,7 @@ def get_enabled_features(
 
 
 def get_feature_flags(
-    feature_names: List[str],
-    user: Optional[Union[User, Dict[str, str]]] = None
+    feature_names: List[str], user: Optional[Union[User, Dict[str, str]]] = None
 ) -> Dict[str, bool]:
     """
     Get enabled status for multiple features as a dictionary.
