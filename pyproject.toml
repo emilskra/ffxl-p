@@ -4,17 +4,16 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ffxl-p"
-version = "0.0.1a0"
-description = "Feature Flags Extra Light - A lightweight, file-based feature flag system for Python"
+version = "0.1.0a0"
+description = "Feature Flags Extra Light - A lightweight, file-based feature flag system with gradual rollout support"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "ffxl-p contributors"}
+    {name = "emilskra", email = "emilagamamedov@gmail.com"}
 ]
 keywords = ["feature-flags", "feature-toggles", "flags", "toggles", "yaml"]
 classifiers = [
-    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -30,7 +29,7 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -44,7 +43,7 @@ Repository = "https://github.com/emilskra/ffxl-p"
 Issues = "https://github.com/emilskra/ffxl-p/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ffxl_p"]
+packages = ["ffxl_p"]
 
 [tool.ruff]
 line-length = 100

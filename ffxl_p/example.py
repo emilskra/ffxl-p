@@ -22,72 +22,58 @@ def main():
     config = load_feature_flags("./feature-flags.yaml")
     print(f"Loaded {len(config['features'])} features\n")
 
-    # Example 1: Check if a feature is globally enabled
-    print("Example 1: Global feature check")
+    # Example: Check if a feature is globally enabled
+    print("Example: Global feature check")
     print(f"Is 'new_dashboard' enabled? {is_feature_enabled('new_dashboard')}")
     print(f"Is 'beta_feature' enabled? {is_feature_enabled('beta_feature')}")
     print()
 
-    # Example 2: Check user-specific features
-    print("Example 2: User-specific feature check")
+    # Example: Check user-specific features
+    print("Example: User-specific feature check")
     admin_user = User(user_id="user-123")
     regular_user = User(user_id="user-789")
 
-    print(
-        f"Is 'admin_panel' enabled for admin? {is_feature_enabled('admin_panel', admin_user)}"
-    )
+    print(f"Is 'admin_panel' enabled for admin? {is_feature_enabled('admin_panel', admin_user)}")
     print(
         f"Is 'admin_panel' enabled for regular user? {is_feature_enabled('admin_panel', regular_user)}"
     )
     print()
 
-    # Example 3: Using dict instead of User object
-    print("Example 3: Using dict for user")
-    user_dict = {"user_id": "user-456"}
-    print(
-        f"Is 'admin_panel' enabled for user-456? {is_feature_enabled('admin_panel', user_dict)}"
-    )
-    print()
-
-    # Example 4: Check multiple features
-    print("Example 4: Multiple feature checks")
+    # Example: Check multiple features
+    print("Example: Multiple feature checks")
     features_to_check = ["new_dashboard", "beta_feature", "dark_mode"]
-    print(
-        f"Is ANY of {features_to_check} enabled? {is_any_feature_enabled(features_to_check)}"
-    )
-    print(
-        f"Are ALL of {features_to_check} enabled? {are_all_features_enabled(features_to_check)}"
-    )
+    print(f"Is ANY of {features_to_check} enabled? {is_any_feature_enabled(features_to_check)}")
+    print(f"Are ALL of {features_to_check} enabled? {are_all_features_enabled(features_to_check)}")
     print()
 
-    # Example 5: Get all enabled features for a user
-    print("Example 5: Get enabled features for users")
+    # Example: Get all enabled features for a user
+    print("Example: Get enabled features for users")
     print(f"Enabled features (no user): {get_enabled_features()}")
     print(f"Enabled features for admin: {get_enabled_features(admin_user)}")
     print(f"Enabled features for regular user: {get_enabled_features(regular_user)}")
     print()
 
-    # Example 6: Get feature flags as dict
-    print("Example 6: Get feature flags as dict")
+    # Example: Get feature flags as dict
+    print("Example: Get feature flags as dict")
     flags = get_feature_flags(["new_dashboard", "admin_panel", "dark_mode"], admin_user)
     print(f"Feature flags for admin: {flags}")
     print()
 
-    # Example 7: Utility functions
-    print("Example 7: Utility functions")
+    # Example: Utility functions
+    print("Example: Utility functions")
     print(f"Does 'new_dashboard' exist? {feature_exists('new_dashboard')}")
     print(f"Does 'nonexistent_feature' exist? {feature_exists('nonexistent_feature')}")
     print(f"All feature names: {get_all_feature_names()}")
     print()
 
-    # Example 8: Get feature configuration
-    print("Example 8: Get feature configuration")
+    # Example: Get feature configuration
+    print("Example: Get feature configuration")
     config = get_feature_config("admin_panel")
     print(f"Admin panel config: {config}")
     print()
 
-    # Example 9: Conditional feature usage
-    print("Example 9: Conditional feature rendering")
+    # Example: Conditional feature usage
+    print("Example: Conditional feature rendering")
     current_user = User(user_id="developer-001")
 
     if is_feature_enabled("new_dashboard", current_user):
@@ -101,8 +87,8 @@ def main():
         print("  Using stable API endpoints")
     print()
 
-    # Example 10: Development mode logging
-    print("Example 10: Development mode")
+    # Example: Development mode logging
+    print("Example: Development mode")
     print("Set FFXL_DEV_MODE=true environment variable to see detailed logging")
 
 

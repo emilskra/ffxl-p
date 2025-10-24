@@ -4,11 +4,15 @@ FFXL-P: Feature Flags Extra Light - Python Implementation
 A lightweight, file-based feature flag system for Python applications.
 Supports YAML configuration with user-specific feature access control.
 """
+
 import logging
 import os
 import json
+import hashlib
+import uuid
 from typing import Dict, List, Optional, Any, Union
-from dataclasses import dataclass
+
+User = Union[int, str, uuid.UUID]
 
 try:
     import yaml
@@ -16,12 +20,6 @@ except ImportError:
     raise ImportError("PyYAML is required. Install with: pip install pyyaml")
 
 logger = logging.getLogger(__name__)
-
-@dataclass
-class User:
-    """User object for feature flag evaluation."""
-
-    user_id: str
 
 
 class FeatureFlagConfig:
@@ -37,18 +35,27 @@ class FeatureFlagConfig:
         if self._dev_mode:
             logger.info(f"[FFXL] {message}")
 
-    def is_feature_enabled(
-        self, feature_name: str, user: Optional[Union[User, Dict[str, str]]] = None
-    ) -> bool:
+    def _get_user_percentage(self, feature_name: str, user_id: User) -> int:
+        """
+        Calculate a consistent percentage (0-100) for a user and feature.
+
+        Uses SHA256 hash of feature_name + user_id to ensure:
+        - Same user gets same percentage for same feature (consistency)
+        - Different features have different distributions (independence)
+        - Even distribution across 0-100 range
+        """
+        # Combine feature name and user ID for consistent hashing
+        hash_input = f"{feature_name}:{user_id}".encode("utf-8")
+
+        h = hashlib.sha256(hash_input).digest()
+
+        # Take first 8 bytes as unsigned 64-bit int; map to [0,1)
+        n = int.from_bytes(h[:8], "big", signed=False)
+        return (n / 2**64) * 100
+
+    def is_feature_enabled(self, feature_name: str, user_id: User = None) -> bool:
         """
         Check if a feature is enabled for the given user and environment.
-
-        Args:
-            feature_name: Name of the feature to check
-            user: User object or dict with 'user_id' key (optional)
-
-        Returns:
-            True if feature is enabled, False otherwise
         """
         if not self.feature_exists(feature_name):
             self._log(f"Feature '{feature_name}' does not exist")
@@ -72,19 +79,44 @@ class FeatureFlagConfig:
                 )
                 return False
             self._log(
-                f"Feature '{feature_name}' environment check passed "
-                f"for '{self._environment}'"
+                f"Feature '{feature_name}' environment check passed for '{self._environment}'"
             )
 
-        # Extract user_id from user object or dict
-        user_id = None
-        if user:
-            if isinstance(user, User):
-                user_id = user.user_id
-            elif isinstance(user, dict) and "user_id" in user:
-                user_id = user["user_id"]
+        # Check percentage rollout
+        if "rollout" in feature and feature["rollout"]:
+            rollout_config = feature["rollout"]
 
-        # Check user-specific access
+            # Check if there's a percentage for current environment
+            if self._environment and self._environment in rollout_config:
+                target_percentage = rollout_config[self._environment]
+
+                # Percentage rollout requires a user
+                if user_id is None:
+                    self._log(
+                        f"Feature '{feature_name}' has percentage rollout but no user provided"
+                    )
+                    return False
+
+                # Calculate user's bucket (0-100)
+                user_percentage = self._get_user_percentage(feature_name, user_id)
+                is_enabled = user_percentage <= target_percentage
+
+                self._log(
+                    f"Feature '{feature_name}' rollout check: "
+                    f"user_percentage={user_percentage}, "
+                    f"target={target_percentage}, "
+                    f"result={is_enabled}"
+                )
+                return is_enabled
+            else:
+                # No rollout config for this environment, treat as 0%
+                self._log(
+                    f"Feature '{feature_name}' has rollout config but no percentage "
+                    f"for environment '{self._environment}'"
+                )
+                return False
+
+        # Check user-specific access list
         if "onlyForUserIds" in feature and feature["onlyForUserIds"]:
             only_for_users = feature["onlyForUserIds"]
             is_enabled = user_id in only_for_users
@@ -95,89 +127,50 @@ class FeatureFlagConfig:
 
         # Check global enabled flag
         is_enabled = feature.get("enabled", False)
-        self._log(
-            f"Feature '{feature_name}' is globally {'enabled' if is_enabled else 'disabled'}"
-        )
+        self._log(f"Feature '{feature_name}' is globally {'enabled' if is_enabled else 'disabled'}")
         return is_enabled
 
     def is_any_feature_enabled(
         self,
         feature_names: List[str],
-        user: Optional[Union[User, Dict[str, str]]] = None,
+        user: Optional[User] = None,
     ) -> bool:
         """
         Check if any of the given features are enabled.
-
-        Args:
-            feature_names: List of feature names to check
-            user: User object or dict with 'user_id' key (optional)
-
-        Returns:
-            True if at least one feature is enabled, False otherwise
         """
         return any(self.is_feature_enabled(name, user) for name in feature_names)
 
     def are_all_features_enabled(
         self,
         feature_names: List[str],
-        user: Optional[Union[User, Dict[str, str]]] = None,
+        user: Optional[User] = None,
     ) -> bool:
         """
         Check if all of the given features are enabled.
-
-        Args:
-            feature_names: List of feature names to check
-            user: User object or dict with 'user_id' key (optional)
-
-        Returns:
-            True if all features are enabled, False otherwise
         """
         return all(self.is_feature_enabled(name, user) for name in feature_names)
 
-    def get_enabled_features(
-        self, user: Optional[Union[User, Dict[str, str]]] = None
-    ) -> List[str]:
+    def get_enabled_features(self, user: Optional[User] = None) -> List[str]:
         """
         Get list of all enabled features for the given user.
-
-        Args:
-            user: User object or dict with 'user_id' key (optional)
-
-        Returns:
-            List of enabled feature names
         """
         return [
-            name
-            for name in self.get_all_feature_names()
-            if self.is_feature_enabled(name, user)
+            name for name in self.get_all_feature_names() if self.is_feature_enabled(name, user)
         ]
 
     def get_feature_flags(
         self,
         feature_names: List[str],
-        user: Optional[Union[User, Dict[str, str]]] = None,
+        user: Optional[User] = None,
     ) -> Dict[str, bool]:
         """
         Get enabled status for multiple features as a dictionary.
-
-        Args:
-            feature_names: List of feature names to check
-            user: User object or dict with 'user_id' key (optional)
-
-        Returns:
-            Dictionary mapping feature names to their enabled status
         """
         return {name: self.is_feature_enabled(name, user) for name in feature_names}
 
     def feature_exists(self, feature_name: str) -> bool:
         """
         Check if a feature exists in the configuration.
-
-        Args:
-            feature_name: Name of the feature to check
-
-        Returns:
-            True if feature exists, False otherwise
         """
         return feature_name in self._config.get("features", {})
 
@@ -193,12 +186,6 @@ class FeatureFlagConfig:
     def get_feature_config(self, feature_name: str) -> Optional[Dict[str, Any]]:
         """
         Get the raw configuration for a specific feature.
-
-        Args:
-            feature_name: Name of the feature
-
-        Returns:
-            Feature configuration dict or None if not found
         """
         return self._config.get("features", {}).get(feature_name)
 
@@ -227,9 +214,7 @@ def load_feature_flags(
 
     if file_path is None:
         file_path = (
-            os.getenv("FFXL_FILE")
-            or os.getenv("FEATURE_FLAGS_FILE")
-            or "./feature-flags.yaml"
+            os.getenv("FFXL_FILE") or os.getenv("FEATURE_FLAGS_FILE") or "./feature-flags.yaml"
         )
 
     # Check if config is provided via environment variable
@@ -281,15 +266,13 @@ def _get_config() -> FeatureFlagConfig:
     return _global_config
 
 
-def is_feature_enabled(
-    feature_name: str, user: Optional[Union[User, Dict[str, str]]] = None
-) -> bool:
+def is_feature_enabled(feature_name: str, user: Optional[User] = None) -> bool:
     """
     Check if a feature is enabled for the given user.
 
     Args:
         feature_name: Name of the feature to check
-        user: User object or dict with 'user_id' key (optional)
+        user: User unique identificator
 
     Returns:
         True if feature is enabled, False otherwise
@@ -297,65 +280,30 @@ def is_feature_enabled(
     return _get_config().is_feature_enabled(feature_name, user)
 
 
-def is_any_feature_enabled(
-    feature_names: List[str], user: Optional[Union[User, Dict[str, str]]] = None
-) -> bool:
+def is_any_feature_enabled(feature_names: List[str], user: Optional[User] = None) -> bool:
     """
     Check if any of the given features are enabled.
-
-    Args:
-        feature_names: List of feature names to check
-        user: User object or dict with 'user_id' key (optional)
-
-    Returns:
-        True if at least one feature is enabled, False otherwise
     """
     return _get_config().is_any_feature_enabled(feature_names, user)
 
 
-def are_all_features_enabled(
-    feature_names: List[str], user: Optional[Union[User, Dict[str, str]]] = None
-) -> bool:
+def are_all_features_enabled(feature_names: List[str], user: Optional[User] = None) -> bool:
     """
     Check if all of the given features are enabled.
-
-    Args:
-        feature_names: List of feature names to check
-        user: User object or dict with 'user_id' key (optional)
-
-    Returns:
-        True if all features are enabled, False otherwise
     """
     return _get_config().are_all_features_enabled(feature_names, user)
 
 
-def get_enabled_features(
-    user: Optional[Union[User, Dict[str, str]]] = None,
-) -> List[str]:
+def get_enabled_features(user: Optional[User] = None) -> List[str]:
     """
     Get list of all enabled features for the given user.
-
-    Args:
-        user: User object or dict with 'user_id' key (optional)
-
-    Returns:
-        List of enabled feature names
     """
     return _get_config().get_enabled_features(user)
 
 
-def get_feature_flags(
-    feature_names: List[str], user: Optional[Union[User, Dict[str, str]]] = None
-) -> Dict[str, bool]:
+def get_feature_flags(feature_names: List[str], user: Optional[User] = None) -> Dict[str, bool]:
     """
     Get enabled status for multiple features as a dictionary.
-
-    Args:
-        feature_names: List of feature names to check
-        user: User object or dict with 'user_id' key (optional)
-
-    Returns:
-        Dictionary mapping feature names to their enabled status
     """
     return _get_config().get_feature_flags(feature_names, user)
 
@@ -363,12 +311,6 @@ def get_feature_flags(
 def feature_exists(feature_name: str) -> bool:
     """
     Check if a feature exists in the configuration.
-
-    Args:
-        feature_name: Name of the feature to check
-
-    Returns:
-        True if feature exists, False otherwise
     """
     return _get_config().feature_exists(feature_name)
 
@@ -386,11 +328,5 @@ def get_all_feature_names() -> List[str]:
 def get_feature_config(feature_name: str) -> Optional[Dict[str, Any]]:
     """
     Get the raw configuration for a specific feature.
-
-    Args:
-        feature_name: Name of the feature
-
-    Returns:
-        Feature configuration dict or None if not found
     """
     return _get_config().get_feature_config(feature_name)

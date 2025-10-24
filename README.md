@@ -9,10 +9,12 @@ A lightweight, file-based feature flag system for Python applications. This is a
 
 ## Features
 
-- **Environment-based control** - Enable features only in dev, staging, or production
-- YAML-based configuration stored locally
+- **Gradual rollout** - Enable features for a percentage of users (10%, 50%, 100%, etc.)
+- **Environment-based control** - Different rollout percentages per environment
+- **Consistent hashing** - Same user always gets same result for a feature
 - User-specific feature flag access control
 - Combined environment + user restrictions
+- YAML-based configuration stored locally
 - Development mode with informative logging
 - Simple, intuitive API
 - Full type hints support
@@ -117,23 +119,64 @@ features:
     comment: "Production only"
 ```
 
-### Combined Restrictions
+### Gradual Rollout (Percentage-Based)
 
-Combine environment and user restrictions:
+Enable features for a percentage of users in each environment:
 
 ```yaml
 features:
-  experimental_api:
-    enabled: true
-    environments: ["dev", "staging"]
-    onlyForUserIds: ["developer-001", "developer-002"]
-    comment: "Only for specific developers in dev/staging"
+  new_feature:
+    rollout:
+      dev: 100        # 100% in dev
+      staging: 50     # 50% in staging
+      production: 10  # 10% in production
+    comment: "Gradual rollout - start small, expand carefully"
+
+  experimental_feature:
+    rollout:
+      dev: 100
+      staging: 25
+      production: 5
+    comment: "Cautious rollout - 5% in production"
+```
+
+**How it works:**
+- Uses consistent hashing (SHA256) of `feature_name + user_id`
+- Same user always gets same result for same feature
+- Different features have independent distributions
+- **Requires user** - percentage rollout only works when a user is provided
+
+**Example usage:**
+```python
+from ffxl_p import load_feature_flags, is_feature_enabled, User
+
+load_feature_flags(environment='production')
+
+user = User(user_id="user-123")
+if is_feature_enabled('new_feature', user):
+    # This user is in the 10% rollout group
+    show_new_feature()
+```
+
+### Combined Restrictions
+
+Combine environment restrictions with percentage rollout:
+
+```yaml
+features:
+  advanced_feature:
+    environments: ["staging", "production"]
+    rollout:
+      staging: 100    # All users in staging
+      production: 25  # 25% of users in production
+    comment: "Full staging test, then 25% production rollout"
 ```
 
 **Priority Order:**
 1. Environment check (if `environments` is specified)
-2. User-specific check (if `onlyForUserIds` is specified)
-3. Global `enabled` flag
+2. Percentage rollout (if `rollout` is specified, **requires user**)
+3. User-specific list (if `onlyForUserIds` is specified)
+4. Global `enabled` flag
 
 ## API Reference
 

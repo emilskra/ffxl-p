@@ -21,7 +21,7 @@ def main():
     print("Example 1: Loading with explicit environment")
     print("-" * 70)
 
-    load_feature_flags('./feature-flags.yaml', environment='dev')
+    load_feature_flags("./feature-flags.yaml", environment="dev")
     print("Loaded feature flags for environment: dev")
     print()
 
@@ -36,7 +36,7 @@ def main():
     print("Example 2: Switching to staging environment")
     print("-" * 70)
 
-    load_feature_flags('./feature-flags.yaml', environment='staging')
+    load_feature_flags("./feature-flags.yaml", environment="staging")
     print("Loaded feature flags for environment: staging")
     print()
 
@@ -50,7 +50,7 @@ def main():
     print("Example 3: Production environment")
     print("-" * 70)
 
-    load_feature_flags('./feature-flags.yaml', environment='production')
+    load_feature_flags("./feature-flags.yaml", environment="production")
     print("Loaded feature flags for environment: production")
     print()
 
@@ -64,26 +64,32 @@ def main():
     print("Example 4: Combined environment + user restrictions")
     print("-" * 70)
 
-    load_feature_flags('./feature-flags.yaml', environment='dev')
+    load_feature_flags("./feature-flags.yaml", environment="dev")
 
     dev_user = User(user_id="developer-001")
     regular_user = User(user_id="regular-user")
 
-    print(f"Experimental API for developer (dev env): {is_feature_enabled('experimental_api', dev_user)}")
-    print(f"Experimental API for regular user (dev env): {is_feature_enabled('experimental_api', regular_user)}")
+    print(
+        f"Experimental API for developer (dev env): {is_feature_enabled('experimental_api', dev_user)}"
+    )
+    print(
+        f"Experimental API for regular user (dev env): {is_feature_enabled('experimental_api', regular_user)}"
+    )
     print()
 
     # Switch to production - feature restricted by environment
-    load_feature_flags('./feature-flags.yaml', environment='production')
-    print(f"Experimental API for developer (production env): {is_feature_enabled('experimental_api', dev_user)}")
+    load_feature_flags("./feature-flags.yaml", environment="production")
+    print(
+        f"Experimental API for developer (production env): {is_feature_enabled('experimental_api', dev_user)}"
+    )
     print()
 
     # Example 5: Get all enabled features for environment
     print("Example 5: All enabled features by environment")
     print("-" * 70)
 
-    for env in ['dev', 'staging', 'production']:
-        load_feature_flags('./feature-flags.yaml', environment=env)
+    for env in ["dev", "staging", "production"]:
+        load_feature_flags("./feature-flags.yaml", environment=env)
         enabled = get_enabled_features()
         print(f"{env}: {', '.join(enabled)}")
     print()
@@ -105,13 +111,13 @@ def main():
 
     # Simulate different environments
     scenarios = {
-        'dev': 'Development - all debugging features enabled',
-        'staging': 'Staging - test production-ready features',
-        'production': 'Production - only stable features'
+        "dev": "Development - all debugging features enabled",
+        "staging": "Staging - test production-ready features",
+        "production": "Production - only stable features",
     }
 
     for env, description in scenarios.items():
-        load_feature_flags('./feature-flags.yaml', environment=env)
+        load_feature_flags("./feature-flags.yaml", environment=env)
         enabled = get_enabled_features()
         print(f"\n{env.upper()}: {description}")
         print(f"  Enabled features: {len(enabled)}")
@@ -126,5 +132,5 @@ def main():
     print()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
