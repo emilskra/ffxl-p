@@ -2,16 +2,17 @@
 
 [![PyPI version](https://badge.fury.io/py/ffxl-p.svg)](https://badge.fury.io/py/ffxl-p)
 [![Python Versions](https://img.shields.io/pypi/pyversions/ffxl-p.svg)](https://pypi.org/project/ffxl-p/)
-[![CI](https://github.com/yourusername/ffxl-p/workflows/CI/badge.svg)](https://github.com/yourusername/ffxl-p/actions)
+[![CI](https://github.com/yourusername/ffxl-p/workflows/CI/badge.svg)](https://github.com/emilskra/ffxl-p/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A lightweight, file-based feature flag system for Python applications. This is a Python implementation inspired by the [ffxl](https://github.com/57uff3r/ffxl) TypeScript library.
 
 ## Features
 
-- Zero external dependencies (except PyYAML)
+- **Environment-based control** - Enable features only in dev, staging, or production
 - YAML-based configuration stored locally
 - User-specific feature flag access control
+- Combined environment + user restrictions
 - Development mode with informative logging
 - Simple, intuitive API
 - Full type hints support
@@ -94,6 +95,46 @@ features:
 
 When `onlyForUserIds` is present and populated, it takes precedence over the `enabled` setting.
 
+### Environment-Based Access
+
+Control which environments a feature is enabled in:
+
+```yaml
+features:
+  debug_mode:
+    enabled: true
+    environments: ["dev"]
+    comment: "Only in development"
+
+  staging_feature:
+    enabled: true
+    environments: ["dev", "staging"]
+    comment: "Dev and staging only"
+
+  production_feature:
+    enabled: true
+    environments: ["production"]
+    comment: "Production only"
+```
+
+### Combined Restrictions
+
+Combine environment and user restrictions:
+
+```yaml
+features:
+  experimental_api:
+    enabled: true
+    environments: ["dev", "staging"]
+    onlyForUserIds: ["developer-001", "developer-002"]
+    comment: "Only for specific developers in dev/staging"
+```
+
+**Priority Order:**
+1. Environment check (if `environments` is specified)
+2. User-specific check (if `onlyForUserIds` is specified)
+3. Global `enabled` flag
+
 ## API Reference
 
 ### Loading Configuration
@@ -102,8 +143,11 @@ When `onlyForUserIds` is present and populated, it takes precedence over the `en
 # Load from default location (./feature-flags.yaml)
 load_feature_flags()
 
+# Load with explicit environment
+load_feature_flags(environment='production')
+
 # Load from custom path
-load_feature_flags('./config/flags.yaml')
+load_feature_flags('./config/flags.yaml', environment='staging')
 
 # Load as JSON string (for environment variables)
 config_string = load_feature_flags_as_string()
@@ -163,6 +207,19 @@ export FEATURE_FLAGS_FILE=./config/flags.yaml
 ```bash
 # Pass configuration as JSON string
 export FFXL_CONFIG='{"features": {"feature1": {"enabled": true}}}'
+```
+
+### Set Current Environment
+
+```bash
+# Option 1: Use FFXL_ENV
+export FFXL_ENV=production
+
+# Option 2: Use generic ENV variable
+export ENV=staging
+
+# In code (takes precedence over env variables)
+load_feature_flags(environment='dev')
 ```
 
 ### Development Mode

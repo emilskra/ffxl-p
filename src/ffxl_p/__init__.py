@@ -4,7 +4,7 @@ FFXL-P: Feature Flags Extra Light - Python Implementation
 A lightweight, file-based feature flag system for Python applications.
 Supports YAML configuration with user-specific feature access control.
 """
-
+import logging
 import os
 import json
 from typing import Dict, List, Optional, Any, Union
@@ -15,6 +15,7 @@ try:
 except ImportError:
     raise ImportError("PyYAML is required. Install with: pip install pyyaml")
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class User:
@@ -26,20 +27,21 @@ class User:
 class FeatureFlagConfig:
     """Feature flag configuration container."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], environment: Optional[str] = None):
         self._config = config
+        self._environment = environment or os.getenv("FFXL_ENV") or os.getenv("ENV")
         self._dev_mode = os.getenv("FFXL_DEV_MODE", "").lower() in ("true", "1", "yes")
 
     def _log(self, message: str) -> None:
         """Log message in development mode."""
         if self._dev_mode:
-            print(f"[FFXL] {message}")
+            logger.info(f"[FFXL] {message}")
 
     def is_feature_enabled(
         self, feature_name: str, user: Optional[Union[User, Dict[str, str]]] = None
     ) -> bool:
         """
-        Check if a feature is enabled for the given user.
+        Check if a feature is enabled for the given user and environment.
 
         Args:
             feature_name: Name of the feature to check
@@ -53,6 +55,26 @@ class FeatureFlagConfig:
             return False
 
         feature = self._config["features"][feature_name]
+
+        # Check environment restrictions first
+        if "environments" in feature and feature["environments"]:
+            allowed_envs = feature["environments"]
+            if self._environment is None:
+                self._log(
+                    f"Feature '{feature_name}' has environment restrictions {allowed_envs} "
+                    f"but no environment is set"
+                )
+                return False
+            if self._environment not in allowed_envs:
+                self._log(
+                    f"Feature '{feature_name}' is not enabled for environment "
+                    f"'{self._environment}' (allowed: {allowed_envs})"
+                )
+                return False
+            self._log(
+                f"Feature '{feature_name}' environment check passed "
+                f"for '{self._environment}'"
+            )
 
         # Extract user_id from user object or dict
         user_id = None
@@ -185,7 +207,9 @@ class FeatureFlagConfig:
 _global_config: Optional[FeatureFlagConfig] = None
 
 
-def load_feature_flags(file_path: Optional[str] = None) -> Dict[str, Any]:
+def load_feature_flags(
+    file_path: Optional[str] = None, environment: Optional[str] = None
+) -> Dict[str, Any]:
     """
     Load feature flags from YAML file.
 
@@ -193,6 +217,8 @@ def load_feature_flags(file_path: Optional[str] = None) -> Dict[str, Any]:
         file_path: Path to YAML file. If not provided, checks environment
                    variables FFXL_FILE or FEATURE_FLAGS_FILE, or defaults
                    to './feature-flags.yaml'
+        environment: Current environment (e.g., 'dev', 'staging', 'production').
+                    If not provided, checks FFXL_ENV or ENV environment variables.
 
     Returns:
         Parsed configuration dictionary
@@ -211,7 +237,7 @@ def load_feature_flags(file_path: Optional[str] = None) -> Dict[str, Any]:
     if env_config:
         try:
             config = json.loads(env_config)
-            _global_config = FeatureFlagConfig(config)
+            _global_config = FeatureFlagConfig(config, environment)
             return config
         except json.JSONDecodeError:
             pass
@@ -223,22 +249,25 @@ def load_feature_flags(file_path: Optional[str] = None) -> Dict[str, Any]:
     with open(file_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    _global_config = FeatureFlagConfig(config)
+    _global_config = FeatureFlagConfig(config, environment)
     return config
 
 
-def load_feature_flags_as_string(file_path: Optional[str] = None) -> str:
+def load_feature_flags_as_string(
+    file_path: Optional[str] = None, environment: Optional[str] = None
+) -> str:
     """
     Load feature flags and return as JSON string.
     Useful for passing configuration to other processes or environments.
 
     Args:
         file_path: Path to YAML file (optional)
+        environment: Current environment (optional)
 
     Returns:
         JSON string representation of the configuration
     """
-    config = load_feature_flags(file_path)
+    config = load_feature_flags(file_path, environment)
     return json.dumps(config)
 
 

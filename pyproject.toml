@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ffxl-p"
-version = "0.1.0"
+version = "0.0.1a0"
 description = "Feature Flags Extra Light - A lightweight, file-based feature flag system for Python"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -38,10 +38,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/ffxl-p"
-Documentation = "https://github.com/yourusername/ffxl-p#readme"
-Repository = "https://github.com/yourusername/ffxl-p"
-Issues = "https://github.com/yourusername/ffxl-p/issues"
+Homepage = "https://github.com/emilskra/ffxl-p"
+Documentation = "https://github.com/emilskra/ffxl-p#readme"
+Repository = "https://github.com/emilskra/ffxl-p"
+Issues = "https://github.com/emilskra/ffxl-p/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ffxl_p"]

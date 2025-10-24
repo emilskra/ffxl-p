@@ -8,8 +8,8 @@ import tempfile
 import pytest
 from pathlib import Path
 
-import ffxl_p
-from ffxl_p import (
+from src import ffxl_p
+from src.ffxl_p import (
     FeatureFlagConfig,
     User,
     load_feature_flags,
@@ -477,3 +477,186 @@ class TestRealWorldScenarios:
         assert "enabled_feature" in enabled
         assert "user_specific" in enabled
         assert "disabled_feature" not in enabled
+
+
+class TestEnvironmentBasedFeatures:
+    """Tests for environment-based feature flags."""
+
+    @pytest.fixture
+    def env_config(self):
+        """Configuration with environment-based features."""
+        return {
+            "features": {
+                "dev_only": {
+                    "enabled": True,
+                    "environments": ["dev"],
+                    "comment": "Only for development",
+                },
+                "staging_and_prod": {
+                    "enabled": True,
+                    "environments": ["staging", "production"],
+                    "comment": "Staging and production only",
+                },
+                "multi_env": {
+                    "enabled": True,
+                    "environments": ["dev", "staging", "production"],
+                    "comment": "All environments",
+                },
+                "no_env_restriction": {
+                    "enabled": True,
+                    "comment": "No environment restrictions",
+                },
+                "env_and_user": {
+                    "enabled": True,
+                    "environments": ["staging"],
+                    "onlyForUserIds": ["user-1"],
+                    "comment": "Staging + specific users",
+                },
+            }
+        }
+
+    def test_feature_enabled_in_allowed_environment(self, env_config):
+        """Test feature is enabled in allowed environment."""
+        config = FeatureFlagConfig(env_config, environment="dev")
+        assert config.is_feature_enabled("dev_only") is True
+
+    def test_feature_disabled_in_disallowed_environment(self, env_config):
+        """Test feature is disabled when not in allowed environments."""
+        config = FeatureFlagConfig(env_config, environment="production")
+        assert config.is_feature_enabled("dev_only") is False
+
+    def test_feature_enabled_in_multiple_environments(self, env_config):
+        """Test feature enabled in multiple environments."""
+        for env in ["staging", "production"]:
+            config = FeatureFlagConfig(env_config, environment=env)
+            assert config.is_feature_enabled("staging_and_prod") is True
+
+    def test_feature_disabled_when_no_environment_set(self, env_config):
+        """Test feature is disabled when environment is required but not set."""
+        config = FeatureFlagConfig(env_config, environment=None)
+        assert config.is_feature_enabled("dev_only") is False
+
+    def test_feature_with_no_environment_restriction(self, env_config):
+        """Test feature without environment restrictions works in any env."""
+        for env in ["dev", "staging", "production", None]:
+            config = FeatureFlagConfig(env_config, environment=env)
+            assert config.is_feature_enabled("no_env_restriction") is True
+
+    def test_environment_and_user_restrictions_combined(self, env_config):
+        """Test feature with both environment and user restrictions."""
+        user = User(user_id="user-1")
+        wrong_user = User(user_id="user-999")
+
+        # Right environment, right user
+        config_staging = FeatureFlagConfig(env_config, environment="staging")
+        assert config_staging.is_feature_enabled("env_and_user", user) is True
+
+        # Right environment, wrong user
+        assert config_staging.is_feature_enabled("env_and_user", wrong_user) is False
+
+        # Wrong environment, right user
+        config_prod = FeatureFlagConfig(env_config, environment="production")
+        assert config_prod.is_feature_enabled("env_and_user", user) is False
+
+    def test_environment_from_env_variable(self, env_config, monkeypatch):
+        """Test environment detection from FFXL_ENV variable."""
+        monkeypatch.setenv("FFXL_ENV", "dev")
+        config = FeatureFlagConfig(env_config)
+        assert config.is_feature_enabled("dev_only") is True
+
+    def test_environment_from_generic_env_variable(self, env_config, monkeypatch):
+        """Test environment detection from generic ENV variable."""
+        monkeypatch.setenv("ENV", "staging")
+        config = FeatureFlagConfig(env_config)
+        assert config.is_feature_enabled("staging_and_prod") is True
+
+    def test_explicit_environment_overrides_env_variable(
+        self, env_config, monkeypatch
+    ):
+        """Test explicitly passed environment overrides env variable."""
+        monkeypatch.setenv("FFXL_ENV", "production")
+        config = FeatureFlagConfig(env_config, environment="dev")
+        assert config.is_feature_enabled("dev_only") is True
+
+    def test_load_feature_flags_with_environment(self, reset_global_config):
+        """Test loading feature flags with explicit environment."""
+        config_data = {
+            "features": {
+                "test_feature": {
+                    "enabled": True,
+                    "environments": ["staging"],
+                }
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        ) as f:
+            import yaml
+
+            yaml.dump(config_data, f)
+            temp_path = f.name
+
+        try:
+            load_feature_flags(temp_path, environment="staging")
+            assert is_feature_enabled("test_feature") is True
+
+            # Reload with different environment
+            load_feature_flags(temp_path, environment="production")
+            assert is_feature_enabled("test_feature") is False
+        finally:
+            os.unlink(temp_path)
+
+    def test_empty_environments_list(self, env_config):
+        """Test feature with empty environments list."""
+        env_config["features"]["empty_envs"] = {
+            "enabled": True,
+            "environments": [],
+        }
+        config = FeatureFlagConfig(env_config, environment="dev")
+        # Empty list should not match any environment
+        assert config.is_feature_enabled("empty_envs") is True
+
+    def test_get_enabled_features_respects_environment(self, env_config):
+        """Test get_enabled_features respects environment restrictions."""
+        config_dev = FeatureFlagConfig(env_config, environment="dev")
+        enabled_dev = config_dev.get_enabled_features()
+
+        assert "dev_only" in enabled_dev
+        assert "no_env_restriction" in enabled_dev
+        assert "staging_and_prod" not in enabled_dev
+
+        config_staging = FeatureFlagConfig(env_config, environment="staging")
+        enabled_staging = config_staging.get_enabled_features()
+
+        assert "dev_only" not in enabled_staging
+        assert "staging_and_prod" in enabled_staging
+        assert "no_env_restriction" in enabled_staging
+
+    def test_is_any_feature_enabled_with_environments(self, env_config):
+        """Test is_any_feature_enabled with environment restrictions."""
+        config = FeatureFlagConfig(env_config, environment="dev")
+        assert (
+            config.is_any_feature_enabled(["dev_only", "staging_and_prod"]) is True
+        )
+
+        config_prod = FeatureFlagConfig(env_config, environment="production")
+        assert (
+            config_prod.is_any_feature_enabled(["dev_only", "staging_and_prod"])
+            is True
+        )
+
+    def test_are_all_features_enabled_with_environments(self, env_config):
+        """Test are_all_features_enabled with environment restrictions."""
+        config = FeatureFlagConfig(env_config, environment="dev")
+        assert (
+            config.are_all_features_enabled(["dev_only", "staging_and_prod"]) is False
+        )
+
+        config_all = FeatureFlagConfig(env_config, environment="staging")
+        assert (
+            config_all.are_all_features_enabled(
+                ["multi_env", "staging_and_prod", "no_env_restriction"]
+            )
+            is True
+        )

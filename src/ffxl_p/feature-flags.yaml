@@ -1,35 +1,56 @@
 # Feature Flags Configuration
-# Define your feature flags with enabled status and optional user restrictions
+# Define your feature flags with enabled status, environment restrictions, and user restrictions
 
 features:
   new_dashboard:
     enabled: true
-    comment: "New dashboard UI - available to all users"
+    comment: "New dashboard UI - available to all users in all environments"
 
   beta_feature:
     enabled: false
     comment: "Beta feature - not ready yet"
 
+  # Environment-based features
+  debug_mode:
+    enabled: true
+    environments: ["dev"]
+    comment: "Debug mode - only available in development"
+
+  staging_feature:
+    enabled: true
+    environments: ["staging", "dev"]
+    comment: "Feature being tested in staging and dev"
+
+  production_feature:
+    enabled: true
+    environments: ["production"]
+    comment: "Production-only feature"
+
+  # User-specific features
   admin_panel:
     onlyForUserIds:
       - "user-123"
       - "user-456"
     comment: "Admin panel - restricted to specific users"
 
+  # Combined: environment + user restrictions
   experimental_api:
-    enabled: false
+    enabled: true
+    environments: ["dev", "staging"]
     onlyForUserIds:
       - "developer-001"
       - "developer-002"
-    comment: "Experimental API - disabled globally but available to specific developers"
+    comment: "Experimental API - only in dev/staging AND for specific developers"
 
   dark_mode:
     enabled: true
-    comment: "Dark mode theme support"
+    comment: "Dark mode theme support - available everywhere"
 
   advanced_analytics:
+    enabled: true
+    environments: ["staging", "production"]
     onlyForUserIds:
       - "admin-001"
       - "analyst-001"
       - "analyst-002"
-    comment: "Advanced analytics features - user-specific access"
+    comment: "Advanced analytics - production/staging only, specific users"
