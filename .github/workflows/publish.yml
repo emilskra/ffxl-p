@@ -26,10 +26,10 @@ jobs:
           uv sync --dev
 
       - name: Run Ruff linter
-        run: ruff check .
+        run: uv run ruff check .
 
       - name: Run Ruff formatter check
-        run: ruff format --check .
+        run: uv run ruff format --check .
 
   test:
     name: Test on Python ${{ matrix.python-version }}
