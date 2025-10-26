@@ -52,29 +52,46 @@ class FeatureFlagConfig:
                 self._log(f"Feature '{feature_name}' is globally disabled")
                 return False
 
-        # Check if feature has an enabledFrom date restriction
-        if "enabledFrom" in feature and feature["enabledFrom"]:
-            enabled_from_str = feature["enabledFrom"]
+        # Check if feature has an enabledFrom and/or enabledUntil date restriction
+        if ("enabledFrom" in feature and feature["enabledFrom"]) or (
+            "enabledUntil" in feature and feature["enabledUntil"]
+        ):
             # Parse ISO 8601 datetime string
             try:
-                enabled_from = datetime.fromisoformat(enabled_from_str.replace("Z", "+00:00"))
+                enabled_from_str = feature.get("enabledFrom")
+                enabled_until_str = feature.get("enabledUntil")
                 current_time = datetime.now(timezone.utc)
+
+                # Check enabledFrom if present
+                if enabled_from_str:
+                    enabled_from = datetime.fromisoformat(enabled_from_str.replace("Z", "+00:00"))
+                    if current_time < enabled_from:
+                        self._log(
+                            f"Feature '{feature_name}' is not enabled yet. "
+                            f"Will be enabled from {enabled_from_str} (current time: {current_time.isoformat()})"
+                        )
+                        return False
+
+                # Check enabledUntil if present
+                if enabled_until_str:
+                    enabled_until = datetime.fromisoformat(enabled_until_str.replace("Z", "+00:00"))
+                    if current_time > enabled_until:
+                        self._log(
+                            f"Feature '{feature_name}' is no longer enabled. "
+                            f"Was enabled until {enabled_until_str} (current time: {current_time.isoformat()})"
+                        )
+                        return False
+
             except (ValueError, AttributeError) as e:
                 self._log(
-                    f"Feature '{feature_name}' has invalid enabledFrom value: {enabled_from_str}. "
+                    f"Feature '{feature_name}' has invalid enabledFrom/enabledUntil value. "
                     f"Error: {e}"
                 )
                 return False
 
-            if current_time < enabled_from:
-                self._log(
-                    f"Feature '{feature_name}' is not enabled yet. "
-                    f"Will be enabled from {enabled_from_str} (current time: {current_time.isoformat()})"
-                )
-                return False
             self._log(
-                f"Feature '{feature_name}' enabledFrom check passed "
-                f"({enabled_from_str} <= {current_time.isoformat()})"
+                f"Feature '{feature_name}' time window check passed "
+                f"(enabledFrom: {enabled_from_str or 'not set'}, enabledUntil: {enabled_until_str or 'not set'})"
             )
 
         # Check environment restrictions first
@@ -401,6 +418,23 @@ def _validate_config(config: Dict[str, Any]) -> None:
                 raise ConfigValidationError(
                     f"Feature '{feature_name}': 'enabledFrom' must be a valid ISO 8601 datetime string, "
                     f"got: '{enabled_from}'. Error: {e}"
+                ) from None
+
+        # Validate 'enabledUntil' field
+        if "enabledUntil" in feature_config:
+            enabled_until = feature_config["enabledUntil"]
+            if not isinstance(enabled_until, str):
+                raise ConfigValidationError(
+                    f"Feature '{feature_name}': 'enabledUntil' must be a string (ISO 8601 datetime), "
+                    f"got: {type(enabled_until).__name__}"
+                )
+            # Try to parse the datetime to ensure it's valid
+            try:
+                datetime.fromisoformat(enabled_until.replace("Z", "+00:00"))
+            except (ValueError, AttributeError) as e:
+                raise ConfigValidationError(
+                    f"Feature '{feature_name}': 'enabledUntil' must be a valid ISO 8601 datetime string, "
+                    f"got: '{enabled_until}'. Error: {e}"
                 ) from None
 
 

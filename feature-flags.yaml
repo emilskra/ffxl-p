@@ -76,3 +76,13 @@ features:
       - "analyst-001"
       - "analyst-002"
     comment: "Advanced analytics - production/staging only, specific users"
+
+  past_feature:
+    enabled: True,
+    enabledFrom: "2025-01-20 00:00:00Z",
+    comment: "Feature enabled from this date"
+
+  future_feature:
+    enabled: True,
+    enabledFrom: "2025-10-21 00:00:00+00:00",
+    comment: "Back to the future"

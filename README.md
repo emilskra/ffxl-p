@@ -13,8 +13,19 @@ A lightweight, file-based feature flag system for Python applications. This is a
 - **Gradual rollout** - Enable features for a percentage of users (10%, 50%, 100%, etc.)
 - **Environment-based control** - Different rollout percentages per environment
 - User-specific feature flag access control
-- Combined environment + user restrictions
 - YAML-based configuration stored locally
+
+## Frequently asked questions
+### Why feature flags are stored in a file and not in cloud?
+Storing feature flags in a file provides simplicity, ease of use, and version control.
+It allows developers to manage feature flags alongside their codebase without relying on external services. 
+This approach is ideal for small to medium-sized projects or when you want to avoid the complexity and cost of cloud-based solutions. 
+Additionally, file-based configurations can be easily reviewed, audited, and rolled back using standard version control systems like Git.
+
+### I need to deploy to control feature flag?
+Mostly yes, aim to keep deployment process fast and simple.
+Or you could use gradual rollout and timebased activation to minimize the need for frequent deployments.
+
 
 ## Installation
 
@@ -87,6 +98,7 @@ if is_feature_enabled('admin_panel', 'user-456'):
 ## Configuration Format
 
 ### Global Enabled/Disabled
+If feature is disabled then its is off regardless other options. It's global parameter.
 
 ```yaml
 features:
@@ -132,32 +144,44 @@ features:
 
 ### Time-Based Activation
 
-Enable features from a specific date and time (UTC):
+Control when features are enabled using start and/or end dates (UTC):
 
 ```yaml
 features:
+  # Feature enabled from a specific date
   upcoming_feature:
     enabled: true
     enabledFrom: "2025-12-01T00:00:00Z"
     comment: "Will be enabled on December 1st, 2025"
 
-  scheduled_release:
+  # Feature enabled until a specific date
+  limited_time_offer:
     enabled: true
-    enabledFrom: "2025-11-15T14:30:00+00:00"
-    comment: "Scheduled release at 2:30 PM UTC"
+    enabledUntil: "2025-12-31T23:59:59Z"
+    comment: "Holiday promotion ending December 31st"
 
-  combine_with_env:
+  # Feature with a time window (both start and end)
+  beta_testing:
     enabled: true
-    enabledFrom: "2025-11-20T00:00:00Z"
+    enabledFrom: "2025-11-15T00:00:00Z"
+    enabledUntil: "2025-12-15T00:00:00Z"
+    comment: "One-month beta testing period"
+
+  # Combine with environment restrictions
+  scheduled_production_release:
+    enabled: true
+    enabledFrom: "2025-11-20T14:30:00+00:00"
     environments: ["production"]
-    comment: "Production release scheduled for November 20th"
+    comment: "Production release scheduled for November 20th at 2:30 PM UTC"
 ```
 
 **How it works:**
 - Accepts ISO 8601 datetime strings in UTC timezone
-- Feature is disabled if current time is before `enabledFrom`
-- Feature proceeds to other checks (environment, rollout, etc.) if time has passed
+- `enabledFrom`: Feature is disabled if current time is before this date
+- `enabledUntil`: Feature is disabled if current time is after this date
+- Both can be used together to create a time window
 - Supports both 'Z' suffix and '+00:00' for UTC timezone
+- Time checks are evaluated before environment, rollout, and user restrictions
 
 **Example usage:**
 ```python
@@ -165,9 +189,17 @@ from ffxl_p import load_feature_flags, is_feature_enabled
 
 load_feature_flags()
 
-# Will return False before the scheduled time, True after
+# Will return False before enabledFrom, True after
 if is_feature_enabled('upcoming_feature'):
     show_new_feature()
+
+# Will return True before enabledUntil, False after
+if is_feature_enabled('limited_time_offer'):
+    show_promotion()
+
+# Will return True only within the time window
+if is_feature_enabled('beta_testing'):
+    enable_beta_features()
 ```
 
 ### Gradual Rollout (Percentage-Based)
@@ -226,11 +258,12 @@ features:
 ```
 
 **Priority Order:**
-1. Time-based activation check (if `enabledFrom` is specified)
-2. Environment check (if `environments` is specified)
-3. Percentage rollout (if `rollout` is specified, **requires user**)
-4. User-specific list (if `onlyForUserIds` is specified)
-5. Global `enabled` flag
+1. Global `enabled` flag check (if `enabled: false`, feature is disabled regardless of other settings)
+2. Time-based activation check (if `enabledFrom` and/or `enabledUntil` is specified)
+3. Environment check (if `environments` is specified)
+4. Percentage rollout (if `rollout` is specified, **requires user**)
+5. User-specific list (if `onlyForUserIds` is specified)
+6. Global `enabled` flag (defaults to `false` if not specified)
 
 ## API Reference
 

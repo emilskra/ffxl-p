@@ -404,6 +404,28 @@ class TestTimeBasedFeatures:
                     "enabledFrom": past_date.replace("+00:00", "Z"),
                     "comment": "Past date with Z format",
                 },
+                "disabled_in_past": {
+                    "enabled": True,
+                    "enabledUntil": past_date,
+                    "comment": "Disabled in future",
+                },
+                "disabled_in_future": {
+                    "enabled": True,
+                    "enabledUntil": future_date,
+                    "comment": "Disabled in future",
+                },
+                "enabled_time_window": {
+                    "enabled": True,
+                    "enabledFrom": past_date,
+                    "enabledUntil": future_date,
+                    "comment": "Enabled feature in time window",
+                },
+                "disabled_time_window": {
+                    "enabled": False,
+                    "enabledFrom": past_date,
+                    "enabledUntil": future_date,
+                    "comment": "Disabled",
+                },
                 "no_time_restriction": {
                     "enabled": True,
                     "comment": "No time restriction",
@@ -506,6 +528,183 @@ class TestTimeBasedFeatures:
 
         assert "enabledFrom" in str(exc_info.value)
         assert "must be a string" in str(exc_info.value)
+
+    def test_feature_enabled_until_past(self, time_config):
+        """Test feature is disabled when enabledUntil is in the past."""
+        config = FeatureFlagConfig(time_config)
+        assert config.is_feature_enabled("disabled_in_past") is False
+
+    def test_feature_enabled_until_future(self, time_config):
+        """Test feature is enabled when enabledUntil is in the future."""
+        config = FeatureFlagConfig(time_config)
+        assert config.is_feature_enabled("disabled_in_future") is True
+
+    def test_feature_enabled_time_window(self, time_config):
+        """Test feature with both enabledFrom and enabledUntil (time window)."""
+        config = FeatureFlagConfig(time_config)
+        # Current time is within the window (past_date to future_date)
+        assert config.is_feature_enabled("enabled_time_window") is True
+
+    def test_feature_disabled_time_window(self, time_config):
+        """Test globally disabled feature in time window stays disabled."""
+        config = FeatureFlagConfig(time_config)
+        # Even though in time window, enabled=False should keep it disabled
+        assert config.is_feature_enabled("disabled_time_window") is False
+
+    def test_feature_outside_time_window_before(self):
+        """Test feature is disabled when current time is before enabledFrom."""
+        from datetime import datetime, timedelta, timezone
+
+        future_start = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        future_end = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+
+        config = FeatureFlagConfig(
+            {
+                "features": {
+                    "future_window": {
+                        "enabled": True,
+                        "enabledFrom": future_start,
+                        "enabledUntil": future_end,
+                    }
+                }
+            }
+        )
+        assert config.is_feature_enabled("future_window") is False
+
+    def test_feature_outside_time_window_after(self):
+        """Test feature is disabled when current time is after enabledUntil."""
+        from datetime import datetime, timedelta, timezone
+
+        past_start = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+        past_end = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        config = FeatureFlagConfig(
+            {
+                "features": {
+                    "past_window": {
+                        "enabled": True,
+                        "enabledFrom": past_start,
+                        "enabledUntil": past_end,
+                    }
+                }
+            }
+        )
+        assert config.is_feature_enabled("past_window") is False
+
+    def test_enabled_until_with_environment_restriction(self):
+        """Test enabledUntil with environment restrictions."""
+        from datetime import datetime, timedelta, timezone
+
+        future_date = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+
+        config_data = {
+            "features": {
+                "timed_env_feature": {
+                    "enabled": True,
+                    "enabledUntil": future_date,
+                    "environments": ["dev"],
+                }
+            }
+        }
+
+        # Feature should be enabled in dev (time valid + correct env)
+        config_dev = FeatureFlagConfig(config_data, environment="dev")
+        assert config_dev.is_feature_enabled("timed_env_feature") is True
+
+        # Feature should be disabled in production (time valid but wrong env)
+        config_prod = FeatureFlagConfig(config_data, environment="production")
+        assert config_prod.is_feature_enabled("timed_env_feature") is False
+
+    def test_validation_invalid_enabledUntil_format(self):
+        """Test validation rejects invalid enabledUntil format."""
+        from ffxl_p import ConfigValidationError, _validate_config
+
+        config = {
+            "features": {
+                "bad_date": {
+                    "enabled": True,
+                    "enabledUntil": "not-a-date",
+                }
+            }
+        }
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            _validate_config(config)
+
+        assert "enabledUntil" in str(exc_info.value)
+        assert "ISO 8601" in str(exc_info.value)
+
+    def test_validation_enabledUntil_not_string(self):
+        """Test validation rejects non-string enabledUntil."""
+        from ffxl_p import ConfigValidationError, _validate_config
+
+        config = {
+            "features": {
+                "bad_type": {
+                    "enabled": True,
+                    "enabledUntil": 12345,
+                }
+            }
+        }
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            _validate_config(config)
+
+        assert "enabledUntil" in str(exc_info.value)
+        assert "must be a string" in str(exc_info.value)
+
+    def test_enabled_until_with_z_format(self):
+        """Test enabledUntil with 'Z' timezone format."""
+        from datetime import datetime, timedelta, timezone
+
+        future_date = (
+            (datetime.now(timezone.utc) + timedelta(days=1)).isoformat().replace("+00:00", "Z")
+        )
+
+        config = FeatureFlagConfig(
+            {
+                "features": {
+                    "z_format_feature": {
+                        "enabled": True,
+                        "enabledUntil": future_date,
+                    }
+                }
+            }
+        )
+        assert config.is_feature_enabled("z_format_feature") is True
+
+    def test_only_enabledUntil_without_enabledFrom(self):
+        """Test feature with only enabledUntil (no enabledFrom)."""
+        from datetime import datetime, timedelta, timezone
+
+        future_date = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+
+        config = FeatureFlagConfig(
+            {
+                "features": {
+                    "until_only": {
+                        "enabled": True,
+                        "enabledUntil": future_date,
+                    }
+                }
+            }
+        )
+        # Should be enabled since we're before the until date
+        assert config.is_feature_enabled("until_only") is True
+
+    def test_invalid_enabledUntil_format_returns_false(self):
+        """Test feature with invalid enabledUntil format returns False."""
+        config = FeatureFlagConfig(
+            {
+                "features": {
+                    "invalid_until": {
+                        "enabled": True,
+                        "enabledUntil": "not-a-valid-date",
+                    }
+                }
+            }
+        )
+        assert config.is_feature_enabled("invalid_until") is False
 
 
 class TestEnvironmentBasedFeatures:
