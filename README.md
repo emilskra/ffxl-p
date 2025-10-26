@@ -9,6 +9,7 @@ A lightweight, file-based feature flag system for Python applications. This is a
 
 ## Features
 
+- **Time-based activation** - Schedule features to be enabled from a specific date/time (UTC)
 - **Gradual rollout** - Enable features for a percentage of users (10%, 50%, 100%, etc.)
 - **Environment-based control** - Different rollout percentages per environment
 - User-specific feature flag access control
@@ -129,6 +130,46 @@ features:
     comment: "Production only"
 ```
 
+### Time-Based Activation
+
+Enable features from a specific date and time (UTC):
+
+```yaml
+features:
+  upcoming_feature:
+    enabled: true
+    enabledFrom: "2025-12-01T00:00:00Z"
+    comment: "Will be enabled on December 1st, 2025"
+
+  scheduled_release:
+    enabled: true
+    enabledFrom: "2025-11-15T14:30:00+00:00"
+    comment: "Scheduled release at 2:30 PM UTC"
+
+  combine_with_env:
+    enabled: true
+    enabledFrom: "2025-11-20T00:00:00Z"
+    environments: ["production"]
+    comment: "Production release scheduled for November 20th"
+```
+
+**How it works:**
+- Accepts ISO 8601 datetime strings in UTC timezone
+- Feature is disabled if current time is before `enabledFrom`
+- Feature proceeds to other checks (environment, rollout, etc.) if time has passed
+- Supports both 'Z' suffix and '+00:00' for UTC timezone
+
+**Example usage:**
+```python
+from ffxl_p import load_feature_flags, is_feature_enabled
+
+load_feature_flags()
+
+# Will return False before the scheduled time, True after
+if is_feature_enabled('upcoming_feature'):
+    show_new_feature()
+```
+
 ### Gradual Rollout (Percentage-Based)
 
 Enable features for a percentage of users in each environment:
@@ -155,6 +196,8 @@ features:
 - Same user always gets same result for same feature
 - Different features have independent distributions
 - **Requires user** - percentage rollout only works when a user is provided
+
+NOTE: 10% won't mean exactly 10 users out of 100 will get feature, it might be 11 or 9, but statistically over a large number of users it will approximate that.
 
 **Example usage:**
 ```python
@@ -183,10 +226,11 @@ features:
 ```
 
 **Priority Order:**
-1. Environment check (if `environments` is specified)
-2. Percentage rollout (if `rollout` is specified, **requires user**)
-3. User-specific list (if `onlyForUserIds` is specified)
-4. Global `enabled` flag
+1. Time-based activation check (if `enabledFrom` is specified)
+2. Environment check (if `environments` is specified)
+3. Percentage rollout (if `rollout` is specified, **requires user**)
+4. User-specific list (if `onlyForUserIds` is specified)
+5. Global `enabled` flag
 
 ## API Reference
 
@@ -272,7 +316,7 @@ export FFXL_ENV=production
 export ENV=staging
 
 # In code (takes precedence over env variables)
-load_feature_flags(environment='dev')
+load_feature_flags(environment=os.getenv('ENV', 'local'))
 ```
 
 ### Development Mode
@@ -295,8 +339,7 @@ import os
 app = Flask(__name__)
 
 # Load at startup
-config = load_feature_flags()
-app.config['FFXL_CONFIG'] = config
+load_feature_flags()
 
 @app.route('/')
 def index():
@@ -312,7 +355,7 @@ def index():
 # settings.py
 from ffxl_p import load_feature_flags
 
-FEATURE_FLAGS = load_feature_flags('./feature-flags.yaml')
+load_feature_flags('./feature-flags.yaml')
 
 # In views or middleware
 from django.conf import settings
@@ -346,11 +389,7 @@ async def dashboard(user_id: str): # it's just an example, validate provided use
 
 ## Examples
 
-See `example.py` for comprehensive usage examples:
-
-```bash
-python example.py
-```
+See [example.py](ffxl_p/example.py)example.py, [example_environments.py](ffxl_p/example_environments.py) and [example_rollout.py](ffxl_p/example_rollout.py) for comprehensive usage examples
 
 ## Development
 

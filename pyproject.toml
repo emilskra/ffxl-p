@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ffxl-p"
-version = "0.1.0a0"
+version = "0.1.0a1"
 description = "Feature Flags Extra Light - A lightweight, file-based feature flag system with gradual rollout support"
 readme = "README.md"
 requires-python = ">=3.8"

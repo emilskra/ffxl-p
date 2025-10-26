@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 User = Union[int, str, uuid.UUID]
@@ -35,24 +36,6 @@ class FeatureFlagConfig:
         if self._dev_mode:
             logger.info(f"[FFXL] {message}")
 
-    def _get_user_percentage(self, feature_name: str, user_id: User) -> int:
-        """
-        Calculate a consistent percentage (0-100) for a user and feature.
-
-        Uses SHA256 hash of feature_name + user_id to ensure:
-        - Same user gets same percentage for same feature (consistency)
-        - Different features have different distributions (independence)
-        - Even distribution across 0-100 range
-        """
-        # Combine feature name and user ID for consistent hashing
-        hash_input = f"{feature_name}:{user_id}".encode()
-
-        h = hashlib.sha256(hash_input).digest()
-
-        # Take first 8 bytes as unsigned 64-bit int; map to [0,1)
-        n = int.from_bytes(h[:8], "big", signed=False)
-        return (n / 2**64) * 100
-
     def is_feature_enabled(self, feature_name: str, user_id: User = None) -> bool:
         """
         Check if a feature is enabled for the given user and environment.
@@ -62,6 +45,37 @@ class FeatureFlagConfig:
             return False
 
         feature = self._config["features"][feature_name]
+        # Check if flag is disabled globally
+        if "enabled" in feature:
+            is_enabled = feature.get("enabled", False)
+            if is_enabled is False:
+                self._log(f"Feature '{feature_name}' is globally disabled")
+                return False
+
+        # Check if feature has an enabledFrom date restriction
+        if "enabledFrom" in feature and feature["enabledFrom"]:
+            enabled_from_str = feature["enabledFrom"]
+            # Parse ISO 8601 datetime string
+            try:
+                enabled_from = datetime.fromisoformat(enabled_from_str.replace("Z", "+00:00"))
+                current_time = datetime.now(timezone.utc)
+            except (ValueError, AttributeError) as e:
+                self._log(
+                    f"Feature '{feature_name}' has invalid enabledFrom value: {enabled_from_str}. "
+                    f"Error: {e}"
+                )
+                return False
+
+            if current_time < enabled_from:
+                self._log(
+                    f"Feature '{feature_name}' is not enabled yet. "
+                    f"Will be enabled from {enabled_from_str} (current time: {current_time.isoformat()})"
+                )
+                return False
+            self._log(
+                f"Feature '{feature_name}' enabledFrom check passed "
+                f"({enabled_from_str} <= {current_time.isoformat()})"
+            )
 
         # Check environment restrictions first
         if "environments" in feature and feature["environments"]:
@@ -129,6 +143,24 @@ class FeatureFlagConfig:
         is_enabled = feature.get("enabled", False)
         self._log(f"Feature '{feature_name}' is globally {'enabled' if is_enabled else 'disabled'}")
         return is_enabled
+
+    def _get_user_percentage(self, feature_name: str, user_id: User) -> int:
+        """
+        Calculate a consistent percentage (0-100) for a user and feature.
+
+        Uses SHA256 hash of feature_name + user_id to ensure:
+        - Same user gets same percentage for same feature (consistency)
+        - Different features have different distributions (independence)
+        - Even distribution across 0-100 range
+        """
+        # Combine feature name and user ID for consistent hashing
+        hash_input = f"{feature_name}:{user_id}".encode()
+
+        h = hashlib.sha256(hash_input).digest()
+
+        # Take first 8 bytes as unsigned 64-bit int; map to [0,1)
+        n = int.from_bytes(h[:8], "big", signed=False)
+        return (n / 2**64) * 100
 
     def is_any_feature_enabled(
         self,
@@ -233,6 +265,7 @@ def load_feature_flags(
 
     with open(file_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
+        _validate_config(config)
 
     _global_config = FeatureFlagConfig(config, environment)
     return config
@@ -264,6 +297,111 @@ def _get_config() -> FeatureFlagConfig:
         load_feature_flags()
 
     return _global_config
+
+
+class ConfigValidationError(Exception): ...
+
+
+def _validate_config(config: Dict[str, Any]) -> None:
+    """
+    Validate the feature flag configuration structure.
+    """
+    if not isinstance(config, dict):
+        raise ConfigValidationError("Configuration must be a dictionary")
+
+    if "features" not in config:
+        raise ConfigValidationError("Configuration must have a 'features' key")
+
+    features = config["features"]
+    if not isinstance(features, dict):
+        raise ConfigValidationError("'features' must be a dictionary")
+
+    for feature_name, feature_config in features.items():
+        if not isinstance(feature_name, str):
+            raise ConfigValidationError(f"Feature name must be a string, got: {type(feature_name)}")
+
+        if not isinstance(feature_config, dict):
+            raise ConfigValidationError(
+                f"Feature '{feature_name}' configuration must be a dictionary, "
+                f"got: {type(feature_config)}"
+            )
+
+        # Validate 'enabled' field
+        if "enabled" in feature_config:
+            enabled_value = feature_config["enabled"]
+            if not isinstance(enabled_value, bool):
+                raise ConfigValidationError(
+                    f"Feature '{feature_name}': 'enabled' must be a boolean (true/false), "
+                    f"got: {enabled_value} ({type(enabled_value).__name__})"
+                )
+
+        # Validate 'environments' field
+        if "environments" in feature_config:
+            environments = feature_config["environments"]
+            if not isinstance(environments, list):
+                raise ConfigValidationError(
+                    f"Feature '{feature_name}': 'environments' must be a list, "
+                    f"got: {type(environments).__name__}"
+                )
+            for env in environments:
+                if not isinstance(env, str):
+                    raise ConfigValidationError(
+                        f"Feature '{feature_name}': all environment values must be strings, "
+                        f"got: {env} ({type(env).__name__})"
+                    )
+
+        # Validate 'onlyForUserIds' field
+        if "onlyForUserIds" in feature_config:
+            user_ids = feature_config["onlyForUserIds"]
+            if not isinstance(user_ids, list):
+                raise ConfigValidationError(
+                    f"Feature '{feature_name}': 'onlyForUserIds' must be a list, "
+                    f"got: {type(user_ids).__name__}"
+                )
+            # User IDs can be strings, ints, or UUIDs - no strict validation needed
+            # They'll be compared with the user parameter at runtime
+
+        # Validate 'rollout' field
+        if "rollout" in feature_config:
+            rollout = feature_config["rollout"]
+            if not isinstance(rollout, dict):
+                raise ConfigValidationError(
+                    f"Feature '{feature_name}': 'rollout' must be a dictionary, "
+                    f"got: {type(rollout).__name__}"
+                )
+            for env, percentage in rollout.items():
+                if not isinstance(env, str):
+                    raise ConfigValidationError(
+                        f"Feature '{feature_name}': rollout environment keys must be strings, "
+                        f"got: {env} ({type(env).__name__})"
+                    )
+                if not isinstance(percentage, (int, float)):
+                    raise ConfigValidationError(
+                        f"Feature '{feature_name}': rollout percentage for environment '{env}' "
+                        f"must be a number, got: {percentage} ({type(percentage).__name__})"
+                    )
+                if not (0 <= percentage <= 100):
+                    raise ConfigValidationError(
+                        f"Feature '{feature_name}': rollout percentage for environment '{env}' "
+                        f"must be between 0 and 100, got: {percentage}"
+                    )
+
+        # Validate 'enabledFrom' field
+        if "enabledFrom" in feature_config:
+            enabled_from = feature_config["enabledFrom"]
+            if not isinstance(enabled_from, str):
+                raise ConfigValidationError(
+                    f"Feature '{feature_name}': 'enabledFrom' must be a string (ISO 8601 datetime), "
+                    f"got: {type(enabled_from).__name__}"
+                )
+            # Try to parse the datetime to ensure it's valid
+            try:
+                datetime.fromisoformat(enabled_from.replace("Z", "+00:00"))
+            except (ValueError, AttributeError) as e:
+                raise ConfigValidationError(
+                    f"Feature '{feature_name}': 'enabledFrom' must be a valid ISO 8601 datetime string, "
+                    f"got: '{enabled_from}'. Error: {e}"
+                ) from None
 
 
 def is_feature_enabled(feature_name: str, user: Optional[User] = None) -> bool:

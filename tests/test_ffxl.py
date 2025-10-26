@@ -375,6 +375,139 @@ class TestRealWorldScenarios:
         assert "disabled_feature" not in enabled
 
 
+class TestTimeBasedFeatures:
+    """Tests for time-based feature activation (enabledFrom)."""
+
+    @pytest.fixture
+    def time_config(self):
+        """Configuration with time-based features."""
+        from datetime import datetime, timedelta, timezone
+
+        # Create dates relative to now
+        past_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        future_date = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+
+        return {
+            "features": {
+                "past_feature": {
+                    "enabled": True,
+                    "enabledFrom": past_date,
+                    "comment": "Enabled in the past",
+                },
+                "future_feature": {
+                    "enabled": True,
+                    "enabledFrom": future_date,
+                    "comment": "Will be enabled in the future",
+                },
+                "past_feature_z_format": {
+                    "enabled": True,
+                    "enabledFrom": past_date.replace("+00:00", "Z"),
+                    "comment": "Past date with Z format",
+                },
+                "no_time_restriction": {
+                    "enabled": True,
+                    "comment": "No time restriction",
+                },
+            }
+        }
+
+    def test_feature_enabled_after_enabledFrom(self, time_config):
+        """Test feature is enabled when current time is after enabledFrom."""
+        config = FeatureFlagConfig(time_config)
+        assert config.is_feature_enabled("past_feature") is True
+
+    def test_feature_disabled_before_enabledFrom(self, time_config):
+        """Test feature is disabled when current time is before enabledFrom."""
+        config = FeatureFlagConfig(time_config)
+        assert config.is_feature_enabled("future_feature") is False
+
+    def test_feature_enabled_with_z_format(self, time_config):
+        """Test feature with 'Z' timezone format."""
+        config = FeatureFlagConfig(time_config)
+        assert config.is_feature_enabled("past_feature_z_format") is True
+
+    def test_feature_without_time_restriction(self, time_config):
+        """Test feature without enabledFrom still works normally."""
+        config = FeatureFlagConfig(time_config)
+        assert config.is_feature_enabled("no_time_restriction") is True
+
+    def test_invalid_datetime_format(self):
+        """Test feature with invalid datetime format returns False."""
+        config = FeatureFlagConfig(
+            {
+                "features": {
+                    "invalid_date": {
+                        "enabled": True,
+                        "enabledFrom": "not-a-valid-date",
+                    }
+                }
+            }
+        )
+        assert config.is_feature_enabled("invalid_date") is False
+
+    def test_time_based_with_environment_restriction(self, time_config):
+        """Test time-based feature with environment restrictions."""
+        from datetime import datetime, timedelta, timezone
+
+        past_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        config_data = {
+            "features": {
+                "timed_env_feature": {
+                    "enabled": True,
+                    "enabledFrom": past_date,
+                    "environments": ["dev"],
+                }
+            }
+        }
+
+        # Feature should be enabled in dev (time passed + correct env)
+        config_dev = FeatureFlagConfig(config_data, environment="dev")
+        assert config_dev.is_feature_enabled("timed_env_feature") is True
+
+        # Feature should be disabled in production (time passed but wrong env)
+        config_prod = FeatureFlagConfig(config_data, environment="production")
+        assert config_prod.is_feature_enabled("timed_env_feature") is False
+
+    def test_validation_invalid_datetime_format(self):
+        """Test validation rejects invalid datetime format."""
+        from ffxl_p import ConfigValidationError, _validate_config
+
+        config = {
+            "features": {
+                "bad_date": {
+                    "enabled": True,
+                    "enabledFrom": "not-a-date",
+                }
+            }
+        }
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            _validate_config(config)
+
+        assert "enabledFrom" in str(exc_info.value)
+        assert "ISO 8601" in str(exc_info.value)
+
+    def test_validation_enabledFrom_not_string(self):
+        """Test validation rejects non-string enabledFrom."""
+        from ffxl_p import ConfigValidationError, _validate_config
+
+        config = {
+            "features": {
+                "bad_type": {
+                    "enabled": True,
+                    "enabledFrom": 12345,
+                }
+            }
+        }
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            _validate_config(config)
+
+        assert "enabledFrom" in str(exc_info.value)
+        assert "must be a string" in str(exc_info.value)
+
+
 class TestEnvironmentBasedFeatures:
     """Tests for environment-based feature flags."""
 

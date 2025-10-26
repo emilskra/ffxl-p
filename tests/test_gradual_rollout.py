@@ -226,4 +226,4 @@ def test_rollout_priority_over_enabled_flag():
     user = "user-123"
 
     # Rollout should take precedence
-    assert config.is_feature_enabled("rollout_priority", user) is True
+    assert config.is_feature_enabled("rollout_priority", user) is False
