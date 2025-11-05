@@ -252,7 +252,7 @@ def load_feature_flags(
     Args:
         file_path: Path to YAML file. If not provided, checks environment
                    variables FFXL_FILE or FEATURE_FLAGS_FILE, or defaults
-                   to './feature-flags.yaml'
+                   to 'feature-flags.yaml' in the package directory
         environment: Current environment (e.g., 'dev', 'staging', 'production').
                     If not provided, checks FFXL_ENV or ENV environment variables.
 
@@ -262,9 +262,13 @@ def load_feature_flags(
     global _global_config
 
     if file_path is None:
-        file_path = (
-            os.getenv("FFXL_FILE") or os.getenv("FEATURE_FLAGS_FILE") or "./feature-flags.yaml"
-        )
+        # First check environment variables
+        file_path = os.getenv("FFXL_FILE") or os.getenv("FEATURE_FLAGS_FILE")
+
+        # If no env var, use package directory as default
+        if not file_path:
+            package_dir = os.path.dirname(os.path.abspath(__file__))
+            file_path = os.path.join(package_dir, "feature-flags.yaml")
 
     # Check if config is provided via environment variable
     env_config = os.getenv("FFXL_CONFIG")
