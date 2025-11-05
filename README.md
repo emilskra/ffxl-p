@@ -15,17 +15,22 @@ A lightweight, file-based feature flag system for Python applications. This is a
 - User-specific feature flag access control
 - YAML-based configuration stored locally
 
-## Frequently asked questions
-### Why feature flags are stored in a file and not in cloud?
-Storing feature flags in a file provides simplicity, ease of use, and version control.
-It allows developers to manage feature flags alongside their codebase without relying on external services. 
-This approach is ideal for small to medium-sized projects or when you want to avoid the complexity and cost of cloud-based solutions. 
-Additionally, file-based configurations can be easily reviewed, audited, and rolled back using standard version control systems like Git.
+#### Frequently Asked Questions (FAQ)
+Why are feature flags stored in a file instead of a cloud service?
+Because simplicity, speed, and control beat dashboards — at least until you really need one.
+FFXL-P was designed for teams who prefer version-controlled infrastructure over vendor lock-in.
 
-### I need to deploy to control feature flag?
-Mostly yes, aim to keep deployment process fast and simple.
-Or you could use gradual rollout and timebased activation to minimize the need for frequent deployments.
+By storing flags in a YAML file:
+- Flags live with your code — you see, review, and deploy them through Git like everything else.
+- Every change is auditable — PR history shows who changed what and why.
+- No external dependencies — works offline, no API keys or webhooks required.
+- Fully deterministic — any commit, any environment, always predictable behavior.
 
+Think of it like infrastructure-as-code, but for product behavior.
+
+#### Do I really need to redeploy every time I toggle a flag?
+Not necessarily.
+You can use [scheduled activations](#time-based-activation) and [gradual rollouts](#gradual-rollout-percentage-based) to make changes go live automatically, without manual redeploys.
 
 ## Installation
 
