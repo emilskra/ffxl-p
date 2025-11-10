@@ -6,6 +6,7 @@ Supports YAML configuration with user-specific feature access control.
 """
 
 import hashlib
+import inspect
 import json
 import logging
 import os
@@ -252,7 +253,7 @@ def load_feature_flags(
     Args:
         file_path: Path to YAML file. If not provided, checks environment
                    variables FFXL_FILE or FEATURE_FLAGS_FILE, or defaults
-                   to './feature-flags.yaml'
+                   to 'feature-flags.yaml' in the caller's directory
         environment: Current environment (e.g., 'dev', 'staging', 'production').
                     If not provided, checks FFXL_ENV or ENV environment variables.
 
@@ -262,9 +263,12 @@ def load_feature_flags(
     global _global_config
 
     if file_path is None:
-        file_path = (
-            os.getenv("FFXL_FILE") or os.getenv("FEATURE_FLAGS_FILE") or "./feature-flags.yaml"
-        )
+        file_path = os.getenv("FFXL_FILE") or os.getenv("FEATURE_FLAGS_FILE")
+        if file_path is None:
+            # Get the directory of the calling script
+            caller_frame = inspect.stack()[1]
+            caller_dir = os.path.dirname(os.path.abspath(caller_frame.filename))
+            file_path = os.path.join(caller_dir, "feature-flags.yaml")
 
     # Check if config is provided via environment variable
     env_config = os.getenv("FFXL_CONFIG")
