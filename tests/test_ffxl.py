@@ -181,10 +181,16 @@ class TestLoadingFunctions:
         config = load_feature_flags()
         assert "features" in config
 
-    def test_load_feature_flags_file_not_found(self, reset_global_config):
-        """Test loading from nonexistent file raises error."""
-        with pytest.raises(FileNotFoundError):
-            load_feature_flags("/nonexistent/path.yaml")
+    def test_load_feature_flags_file_not_found(self, reset_global_config, caplog):
+        """Test loading from nonexistent file logs warning and returns empty config."""
+        config = load_feature_flags("/nonexistent/path.yaml")
+
+        # Should return empty config
+        assert config == {"features": {}}
+
+        # Should log a warning
+        assert "Feature flags file not found" in caplog.text
+        assert "/nonexistent/path.yaml" in caplog.text
 
     def test_load_feature_flags_as_string(self, temp_yaml_file, reset_global_config):
         """Test loading feature flags as JSON string."""
