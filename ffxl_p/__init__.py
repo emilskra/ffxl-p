@@ -282,7 +282,10 @@ def load_feature_flags(
 
     # Load from file
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Feature flags file not found: {file_path}")
+        logger.warning(f"Feature flags file not found: {file_path}. Using empty configuration.")
+        config = {"features": {}}
+        _global_config = FeatureFlagConfig(config, environment)
+        return config
 
     with open(file_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
